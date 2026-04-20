@@ -309,22 +309,35 @@ def static_layers(SECS, route_df, use_tiles):
         get_color=[60,60,160,180], width_scale=4, width_min_pixels=3
     )
 
+    # BS coverage rings as PolygonLayer circles so they are transparent outlines, not filled blobs
+    def _circle_poly(lat, lon, radius_m, n=48):
+        m2lat = 1.0 / 111111.0
+        m2lon = 1.0 / (111111.0 * math.cos(math.radians(lat)))
+        return [[lon + radius_m * m2lon * math.cos(2*math.pi*i/n),
+                 lat + radius_m * m2lat * math.sin(2*math.pi*i/n)]
+                for i in range(n)]
+
     bs_df = pd.DataFrame(BASE_STATIONS, columns=["name","lat","lon","r_m"])
-    rings=[]
+    ring_rows = []
     for r in bs_df.itertuples():
-        # FIX: store r,g,b,a as separate int columns — pydeck cannot parse list-typed columns
-        for color, radius, alpha in [
-            (CBL["green"],  r.r_m,           45),
-            (CBL["orange"], int(r.r_m*2.2),  35),
-            (CBL["red"],    int(r.r_m*3.0),  25),
+        for color, radius_m, fill_a, line_a in [
+            (CBL["green"],  r.r_m,       18, 200),
+            (CBL["orange"], r.r_m * 2.2, 12, 170),
+            (CBL["red"],    r.r_m * 3.0,  8, 140),
         ]:
-            rings.append({"lon":r.lon,"lat":r.lat,"radius":radius,
-                          "cr":color[0],"cg":color[1],"cb":color[2],"ca":alpha})
-    rings_df = pd.DataFrame(rings)
+            ring_rows.append({
+                "polygon": _circle_poly(r.lat, r.lon, radius_m),
+                "fr": color[0], "fg": color[1], "fb": color[2], "fa": fill_a,
+                "lr": color[0], "lg": color[1], "lb": color[2], "la": line_a,
+            })
+    rings_df = pd.DataFrame(ring_rows)
     bs_rings_layer = pdk.Layer(
-        "ScatterplotLayer", data=rings_df, get_position="[lon, lat]",
-        get_radius="radius", get_fill_color="[cr, cg, cb, ca]", stroked=True,
-        get_line_color=[0,0,0,60], line_width_min_pixels=1
+        "PolygonLayer", data=rings_df,
+        get_polygon="polygon",
+        get_fill_color="[fr, fg, fb, fa]",
+        get_line_color="[lr, lg, lb, la]",
+        stroked=True, filled=True,
+        line_width_min_pixels=1,
     )
     tile_layer = None
     if use_tiles:
@@ -744,7 +757,7 @@ with tab_map:
             cur = pd.DataFrame([{"lat":train_pos[0],"lon":train_pos[1],
                                  "icon_data":{"url":"https://img.icons8.com/emoji/48/train-emoji.png","width":128,"height":128,"anchorY":128}}])
             halo_layer = pdk.Layer("ScatterplotLayer", data=cur, get_position='[lon, lat]',
-                                   get_fill_color=halo_color, get_radius=5200, stroked=True,
+                                   get_fill_color=halo_color, get_radius=2000, stroked=True,
                                    get_line_color=[0,0,0], line_width_min_pixels=1)
             icon_layer = pdk.Layer("IconLayer", data=cur, get_position='[lon, lat]',
                                    get_icon='icon_data', get_size=4, size_scale=15)
@@ -753,12 +766,11 @@ with tab_map:
             return layers
 
         def deck_map(tsr_list, train_pos, sensors_df, quality_macro, use_tiles):
-            base_layers = [l for l in [tile_layer, static_path_layer, static_bs_rings] if l is not None]
+            base_layers = [static_path_layer, static_bs_rings]
             dyn_layers = dynamic_layers(tsr_list, train_pos, sensors_df, quality_macro)
             view_state = pdk.ViewState(latitude=60.7, longitude=17.5, zoom=6.2)
             return pdk.Deck(layers=base_layers + dyn_layers, initial_view_state=view_state,
-                            map_provider=None if not use_tiles else "carto",
-                            map_style=None if not use_tiles else "light",
+                            map_style="https://basemaps.cartocdn.com/gl/positron-nolabels-gl-style/style.json",
                             tooltip={"html":"<b>{tooltip}</b>", "style":{"color":"white","background":"rgba(0,0,0,0.7)","border-radius":"6px","padding":"4px"}})
 
         colRW, colTMS = st.columns(2)
