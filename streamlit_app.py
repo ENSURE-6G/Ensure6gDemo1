@@ -3,6 +3,19 @@
 # - UX: headers, presets, play rate, skip buttons, legend, alerts feed, color-blind palette
 # - Features preserved: RAW/SEMANTIC/HYBRID, Lane-A/B, DC, TTT/HO, TSR/STOP/CRASH, maintenance, Sankey, timelines
 
+# ============================================================
+# BUG FIXES APPLIED:
+# 1. build_frame() now returns sensors with all enriched columns (score/label/modality/etc.)
+#    so first-render AttributeError in dynamic_layers() is eliminated.
+# 2. tsr_poly(): mixed metres/degrees unit bug fixed — step_m converted to degrees
+#    via a per-location metres-per-degree factor before calling ROUTE_LS.project/interpolate.
+# 3. TSR list unbounded growth (memory leak): deduplication added for both real alert TSRs
+#    and forced demo hotspot TSRs; lists are also capped at 200 entries.
+# 4. cap_bps_train used as divisor without zero-guard; guarded with max(...,1).
+# 5. raw_hz .map() NaN fall-through: fillna(0) added so bps_total never becomes NaN.
+# 6. dynamic_layers() heat-map path construction used outer `sensors` closure instead of
+#    the `sensors_df` parameter — fixed to use parameter consistently.
+# ============================================================
 
 import math, numpy as np, pandas as pd, streamlit as st, pydeck as pdk
 from shapely.geometry import LineString, Point
@@ -124,10 +137,21 @@ def cap_loss(qual, t_sec, base_capacity_kbps=800, burst_factor=1.4, good_loss_pc
         return max(int(cap*wobble*0.9),1), min(0.4,(bad_loss_pct*0.5)/100.0)
     return int(cap*0.25), bad_loss_pct/100.0
 
+# -------------------- TSR deduplication helper --------------------
+def _poly_key(poly):
+    """Hashable key for a polygon (list of [lon,lat] pairs)."""
+    return tuple(tuple(pt) for pt in poly)
+
+def _tsr_in_list(p, lst):
+    """Return True if a TSR polygon with the same geometry is already in lst."""
+    key = _poly_key(p["polygon"])
+    return any(_poly_key(x["polygon"]) == key for x in lst)
+
+TSR_LIST_CAP = 200  # maximum entries kept to prevent unbounded growth
+
 # -------------------- Sidebar (Presets + Controls) --------------------
 with st.sidebar:
     st.header("Scenario Controls")
-    # Presets to quickly switch "network mood"
     preset = st.segmented_control("Presets", ["Good", "Mixed", "Adverse"], selection_mode="single", key="preset_sel")
     if preset == "Good":
         default_minutes, default_TTT, default_HO = 20, 1000, 200
@@ -319,7 +343,6 @@ with tab_map:
         if c3.button("⏹ Stop", use_container_width=True):
             st.session_state.playing=False; st.session_state.t_idx=0; st.session_state.train_s_m=0.0; st.session_state.train_v_ms=0.0
 
-        # auto-advance by play rate
         if st.session_state.playing:
             rate_map = {"0.5×":1400, "1×":700, "2×":350, "4×":175}
             st_autorefresh(interval=rate_map.get(st.session_state.get("play_rate","1×"), 700), key=f"tick_{SECS}")
@@ -330,10 +353,8 @@ with tab_map:
             t = st.slider("Time (s)", 0, SECS-1, value=st.session_state.t_idx)
             st.session_state.t_idx = t
     with c_topM:
-        # KPI chips skeleton — filled later
         st.markdown('<div id="kpi-holder"></div>', unsafe_allow_html=True)
     with c_topR:
-        # Legend
         st.subheader("Legend")
         st.markdown(
             f"""
@@ -349,6 +370,8 @@ with tab_map:
         )
 
     # ========= Per-frame builder =========
+    # FIX 1: build_frame() now returns sensors with all enriched columns so dynamic_layers()
+    # does not hit AttributeError on the very first render before any tick has run.
     def build_frame(t_idx):
         idx_s = index_from_s(route_df, st.session_state.get("train_s_m", 0.0))
         trainA = (float(route_df.lat.iloc[idx_s]), float(route_df.lon.iloc[idx_s]))
@@ -357,23 +380,39 @@ with tab_map:
         seg = seg_labels[idx_s]
         N_SENS=22
         sidx = np.linspace(0,len(route_df)-1,N_SENS).astype(int)
-        sensors = pd.DataFrame([{"sid":f"S{i:02d}","lat":float(route_df.lat.iloc[j]),"lon":float(route_df.lon.iloc[j])}
-                                for i,j in enumerate(sidx)])
+        sensors_base = pd.DataFrame([{"sid":f"S{i:02d}","lat":float(route_df.lat.iloc[j]),"lon":float(route_df.lon.iloc[j])}
+                                      for i,j in enumerate(sidx)])
         _, _, quality = nearest_bs_quality(*trainA)
         cap_bps, rand_loss = cap_loss(quality, t_idx)
+
+        # Enrich with minimal safe defaults so dynamic_layers() never sees missing columns
+        sensors_base["score"]    = 0.0
+        sensors_base["label"]    = "low"
+        sensors_base["modality"] = "RAW"
+        sensors_base["qualS"]    = "GOOD"
+        sensors_base["capS"]     = cap_bps
+        sensors_base["lossS"]    = rand_loss
+        sensors_base["temp"]     = 24.0
+        sensors_base["strain"]   = 0.0
+        sensors_base["ballast"]  = 0.3
+        sensors_base["hotspot"]  = ""
+        sensors_base["exceeded"] = [[] for _ in range(len(sensors_base))]
+        sensors_base["segment"]  = seg
+        sensors_base["_seg_idx"] = idx_s
+        sensors_base["raw_hz"]   = 2.0
+        sensors_base["raw_bps"]  = 0.0
+
         return dict(t=t_idx, trainA=trainA, trainB=trainB, segment=seg,
                     quality=quality, cap_bps=cap_bps, rand_loss=rand_loss,
-                    enforce_stop=False, crash=False, sensors=sensors)
+                    enforce_stop=False, crash=False, sensors=sensors_base)
 
     if "_frame" not in st.session_state or not isinstance(st.session_state._frame.get("sensors",None), pd.DataFrame):
         st.session_state._frame = build_frame(0)
     if "sensor_hist" not in st.session_state: st.session_state.sensor_hist = []
 
-    # ---------- Right control pane with KPIs/alerts ----------
     colR, colL = st.columns([1.0,2.6])
 
     with colR:
-        # We'll fill metrics after computing frame below
         kpi_holder = st.container()
         st.markdown("#### Alerts (Lane-A)")
         alerts_box = st.container()
@@ -481,7 +520,8 @@ with tab_map:
         # Uplink load
         RAW_HZ = {"RAW":2.0, "HYBRID":0.2, "SEMANTIC":0.0}
         BYTES_RAW = 24; BYTES_ALERT = 280; BYTES_SUMMARY = 180
-        sensors["raw_hz"]  = sensors["modality"].map(RAW_HZ)
+        # FIX 5: fillna(0) so an unexpected modality value never cascades to NaN bps_total
+        sensors["raw_hz"]  = sensors["modality"].map(RAW_HZ).fillna(0.0)
         sensors["raw_bps"] = (sensors["raw_hz"] * BYTES_RAW) * (1.0 - sensors["lossS"])
         raw_bps_delivered  = int(sensors["raw_bps"].sum())
 
@@ -508,36 +548,56 @@ with tab_map:
         raw_bps   = raw_bps_delivered
         bps_total = laneA_bps + laneB_bps + raw_bps
 
-        # TSR polygons (real)
-        def tsr_poly(center_lat,center_lon,length_m=1500,half_w=18):
-            lat0,lon0=center_lat,center_lon
-            m2deg_lat=1/111111.0; m2deg_lon=1/(111111.0*math.cos(math.radians(lat0)))
+        # FIX 2: tsr_poly() — unit mismatch fix.
+        # ROUTE_LS is in degrees (lon/lat). project()/interpolate() therefore work in degrees.
+        # The original code used step_m in *metres* as a step along the line in *degrees* space,
+        # yielding wildly wrong polygon extents. We now convert metres to approximate degrees
+        # at the polygon centre latitude before stepping along the LineString.
+        def tsr_poly(center_lat, center_lon, length_m=1500, half_w=18):
+            lat0, lon0 = center_lat, center_lon
+            m2deg_lat = 1 / 111111.0
+            m2deg_lon = 1 / (111111.0 * math.cos(math.radians(lat0)))
+            # Convert length and half-width to degree units for LineString arithmetic
+            length_deg = length_m * m2deg_lat          # approximate (uses lat scale)
+            half_w_deg_lat = half_w * m2deg_lat
+            half_w_deg_lon = half_w * m2deg_lon
             nearest = ROUTE_LS.interpolate(ROUTE_LS.project(Point(lon0, lat0)))
-            step_m=length_m/10; pts=[nearest]
-            for sgn in (+1,-1):
-                acc=0
-                while acc<length_m/2:
-                    acc+=step_m
-                    s = ROUTE_LS.project(nearest)+sgn*acc
-                    s=max(0,min(s,ROUTE_LS.length)); pts.append(ROUTE_LS.interpolate(s))
-            pts=sorted(pts, key=lambda p: ROUTE_LS.project(p))
-            p0,p1=pts[0],pts[-1]
-            dx,dy = p1.x-p0.x, p1.y-p0.y; L=math.hypot(dx,dy)+1e-12
-            nx,ny = -dy/L, dx/L
-            off_lon=(half_w*m2deg_lon)*nx; off_lat=(half_w*m2deg_lat)*ny
-            return [[p0.x-off_lon,p0.y-off_lat],[p0.x+off_lon,p0.y+off_lat],
-                    [p1.x+off_lon,p1.y+off_lat],[p1.x-off_lon,p1.y-off_lat]]
+            step_deg = length_deg / 10                 # FIX: was step_m (metres) — now in degrees
+            pts = [nearest]
+            for sgn in (+1, -1):
+                acc = 0.0
+                while acc < length_deg / 2:
+                    acc += step_deg
+                    s = ROUTE_LS.project(nearest) + sgn * acc
+                    s = max(0, min(s, ROUTE_LS.length))
+                    pts.append(ROUTE_LS.interpolate(s))
+            pts = sorted(pts, key=lambda p: ROUTE_LS.project(p))
+            p0, p1 = pts[0], pts[-1]
+            dx, dy = p1.x - p0.x, p1.y - p0.y
+            L = math.hypot(dx, dy) + 1e-12
+            nx, ny = -dy / L, dx / L
+            off_lon = half_w_deg_lon * nx
+            off_lat = half_w_deg_lat * ny
+            return [[p0.x - off_lon, p0.y - off_lat], [p0.x + off_lon, p0.y + off_lat],
+                    [p1.x + off_lon, p1.y + off_lat], [p1.x - off_lon, p1.y - off_lat]]
 
+        # FIX 3: Deduplicate real TSRs and cap list size to prevent memory leak
         new_real=[]
         for a in laneA_alerts:
             if a["confidence"] >= tsr_conf_critical:
                 poly = tsr_poly(a["location"]["lat"], a["location"]["lon"])
                 very_high = a["confidence"]>=0.92 and stop_on_critical
-                new_real.append(dict(polygon=poly, speed=tsr_speed_kmh, created_idx=t,
-                                     critical=True, ack_train=False, stop=very_high))
-        for p in new_real: st.session_state.tsr_polys_real.append(p)
+                candidate = dict(polygon=poly, speed=tsr_speed_kmh, created_idx=t,
+                                 critical=True, ack_train=False, stop=very_high)
+                if not _tsr_in_list(candidate, st.session_state.tsr_polys_real):
+                    new_real.append(candidate)
+        for p in new_real:
+            st.session_state.tsr_polys_real.append(p)
+        # Cap list size
+        if len(st.session_state.tsr_polys_real) > TSR_LIST_CAP:
+            st.session_state.tsr_polys_real = st.session_state.tsr_polys_real[-TSR_LIST_CAP:]
 
-        # forced demo TSRs (real) for visibility
+        # FIX 3 (cont.): Deduplicate forced demo hotspot TSRs
         if demo_force_issues and always_show_tsr and len(sensors) > 0:
             latv = sensors["lat"].astype(float).values; lonv = sensors["lon"].astype(float).values
             for h in HOTSPOTS:
@@ -547,10 +607,13 @@ with tab_map:
                     s_hot = sensors.loc[in_hot].sort_values("score", ascending=False).iloc[0]
                     lat_hot = float(s_hot["lat"]); lon_hot = float(s_hot["lon"])
                     poly = tsr_poly(lat_hot, lon_hot)
-                    st.session_state.tsr_polys_real.append(dict(
-                        polygon=poly, speed=tsr_speed_kmh, created_idx=t,
-                        critical=True, ack_train=True, stop=(float(s_hot["score"]) > 0.92)
-                    ))
+                    candidate = dict(polygon=poly, speed=tsr_speed_kmh, created_idx=t,
+                                     critical=True, ack_train=True,
+                                     stop=(float(s_hot["score"]) > 0.92))
+                    if not _tsr_in_list(candidate, st.session_state.tsr_polys_real):
+                        st.session_state.tsr_polys_real.append(candidate)
+            if len(st.session_state.tsr_polys_real) > TSR_LIST_CAP:
+                st.session_state.tsr_polys_real = st.session_state.tsr_polys_real[-TSR_LIST_CAP:]
 
         # Downlink → TMS awareness
         _,_,qual_down = nearest_bs_quality(*trainA)
@@ -559,14 +622,16 @@ with tab_map:
         down_ok = (np.random.random() < (1.0 - loss_down))
         if down_ok:
             for p in st.session_state.tsr_polys_real:
-                if p not in st.session_state.tsr_polys_tms:
+                if not _tsr_in_list(p, st.session_state.tsr_polys_tms):
                     st.session_state.tsr_polys_tms.append(p)
+            if len(st.session_state.tsr_polys_tms) > TSR_LIST_CAP:
+                st.session_state.tsr_polys_tms = st.session_state.tsr_polys_tms[-TSR_LIST_CAP:]
 
         # STOP & CRASH
         enforce_stop = any(p.get("stop",False) for p in st.session_state.tsr_polys_tms)
         crash=False
         for p in st.session_state.tsr_polys_real:
-            if p["critical"] and (p not in st.session_state.tsr_polys_tms) and point_in_poly(trainA[0],trainA[1],p["polygon"]):
+            if p["critical"] and (not _tsr_in_list(p, st.session_state.tsr_polys_tms)) and point_in_poly(trainA[0],trainA[1],p["polygon"]):
                 crash=True; break
 
         # Speed target by TMS TSR
@@ -584,8 +649,11 @@ with tab_map:
         st.session_state.train_v_ms = v_new; st.session_state.train_s_m = s_new
 
         # E2E latency & Lane-A success
+        # FIX 4: guard against cap_bps_train == 0 to avoid ZeroDivisionError
+        cap_bps_safe = max(cap_bps_train, 1)
         lat_ms = TECH[bearer]["base_lat"] + (bps_total/1000.0)
-        if bps_total>cap_bps_train: lat_ms *= min(4.0, 1.0 + 0.35*(bps_total/cap_bps_train - 1))
+        if bps_total > cap_bps_safe:
+            lat_ms *= min(4.0, 1.0 + 0.35*(bps_total/cap_bps_safe - 1))
         if (t < st.session_state.handover_gap_until): lat_ms += 80
         laneA_success = ( (1-per_single)**laneA_reps if not secondary else laneA_success_phy )
         if (t < st.session_state.handover_gap_until) and not secondary:
@@ -614,14 +682,16 @@ with tab_map:
             st.markdown(chip_html, unsafe_allow_html=True)
 
         # ====== Build pydeck layers per view (dynamic bits only) ======
+        # FIX 6: dynamic_layers() now consistently uses the `sensors_df` parameter
+        # for the heat-map path coloring instead of accidentally closing over the outer `sensors`.
         def dynamic_layers(tsr_list, train_pos, sensors_df, quality_macro):
             # Risk heat along the path: pick nearest sensor label → color
             if isinstance(sensors_df, pd.DataFrame) and not sensors_df.empty and "label" in sensors_df.columns:
                 latv = sensors_df["lat"].values; lonv = sensors_df["lon"].values
-                path_np = np.array(static_path_coords)  # [lon,lat]
-                d2 = ( (path_np[:,1][:,None]-latv[None,:])**2 + (path_np[:,0][:,None]-lonv[None,:])**2 )
+                path_np = np.array(static_path_coords)  # [lon, lat]
+                d2 = ( (path_np[:,1][:,None] - latv[None,:])**2 + (path_np[:,0][:,None] - lonv[None,:])**2 )
                 j = np.argmin(d2, axis=1)
-                labels = sensors_df["label"].values[j]
+                labels = sensors_df["label"].values[j]  # FIX 6: use sensors_df, not outer sensors
                 col_map = {"low":CBL["green"]+[180], "medium":CBL["orange"]+[200], "high":CBL["red"]+[220]}
                 heat = [col_map.get(lbl, CBL["green"]+[180]) for lbl in labels]
             else:
@@ -671,7 +741,7 @@ with tab_map:
 
         def deck_map(tsr_list, train_pos, sensors_df, quality_macro, use_tiles):
             base_layers = [l for l in [tile_layer, static_path_layer, static_bs_rings] if l is not None]
-            dyn_layers = dynamic_layers(tsr_list, train_pos, sensors, quality_macro)
+            dyn_layers = dynamic_layers(tsr_list, train_pos, sensors_df, quality_macro)
             view_state = pdk.ViewState(latitude=60.7, longitude=17.5, zoom=6.2)
             return pdk.Deck(layers=base_layers + dyn_layers, initial_view_state=view_state,
                             map_provider=None if not use_tiles else "carto",
@@ -685,7 +755,7 @@ with tab_map:
             st.pydeck_chart(deck_real, use_container_width=True, height=520)
         with colTMS:
             st.markdown('<span class="ribbon">TMS VIEW</span>', unsafe_allow_html=True)
-            deck_tms = deck_map(st.session_state.tsr_polys_tms,  trainA, sensors, quality, use_tiles)
+            deck_tms = deck_map(st.session_state.tsr_polys_tms, trainA, sensors, quality, use_tiles)
             st.pydeck_chart(deck_tms, use_container_width=True, height=520)
 
         # Update frame cache for maps
@@ -803,9 +873,9 @@ with tab_ops:
         if w["status"]=="Dispatched" and t >= w["eta_done_idx"]:
             w["status"]="Resolved"
     # Clear TSRs resolved by maintenance
-    resolved_polys = {tuple(map(tuple, w["polygon"])) for w in st.session_state.work_orders if w["status"]=="Resolved"}
-    st.session_state.tsr_polys_real = [p for p in st.session_state.tsr_polys_real if tuple(map(tuple, p["polygon"])) not in resolved_polys]
-    st.session_state.tsr_polys_tms  = [p for p in st.session_state.tsr_polys_tms  if tuple(map(tuple, p["polygon"])) not in resolved_polys]
+    resolved_polys = {_poly_key(w["polygon"]) for w in st.session_state.work_orders if w["status"]=="Resolved"}
+    st.session_state.tsr_polys_real = [p for p in st.session_state.tsr_polys_real if _poly_key(p["polygon"]) not in resolved_polys]
+    st.session_state.tsr_polys_tms  = [p for p in st.session_state.tsr_polys_tms  if _poly_key(p["polygon"]) not in resolved_polys]
 
     if st.session_state.work_orders:
         rows=[]
@@ -815,8 +885,7 @@ with tab_ops:
     else:
         st.info("No active work orders yet. High-confidence buckling alerts will create them automatically.")
 
-    # Status hints
     if any(p.get("stop",False) for p in st.session_state.tsr_polys_tms):
         st.warning("STOP order in effect (TMS view).")
-    if any((p in st.session_state.tsr_polys_real) and (p not in st.session_state.tsr_polys_tms) for p in st.session_state.tsr_polys_real):
+    if any((not _tsr_in_list(p, st.session_state.tsr_polys_tms)) for p in st.session_state.tsr_polys_real):
         st.error("⚠️ Discrepancy: Real TSR exists that TMS may not know yet (risk of missed alert).")
