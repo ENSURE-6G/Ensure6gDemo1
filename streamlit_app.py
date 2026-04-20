@@ -312,15 +312,18 @@ def static_layers(SECS, route_df, use_tiles):
     bs_df = pd.DataFrame(BASE_STATIONS, columns=["name","lat","lon","r_m"])
     rings=[]
     for r in bs_df.itertuples():
-        rings += [
-            {"lon":r.lon,"lat":r.lat,"radius":r.r_m,          "color":CBL["green"]+[45]},
-            {"lon":r.lon,"lat":r.lat,"radius":int(r.r_m*2.2), "color":CBL["orange"]+[35]},
-            {"lon":r.lon,"lat":r.lat,"radius":int(r.r_m*3.0), "color":CBL["red"]+[25]},
-        ]
+        # FIX: store r,g,b,a as separate int columns — pydeck cannot parse list-typed columns
+        for color, radius, alpha in [
+            (CBL["green"],  r.r_m,           45),
+            (CBL["orange"], int(r.r_m*2.2),  35),
+            (CBL["red"],    int(r.r_m*3.0),  25),
+        ]:
+            rings.append({"lon":r.lon,"lat":r.lat,"radius":radius,
+                          "cr":color[0],"cg":color[1],"cb":color[2],"ca":alpha})
     rings_df = pd.DataFrame(rings)
     bs_rings_layer = pdk.Layer(
         "ScatterplotLayer", data=rings_df, get_position="[lon, lat]",
-        get_radius="radius", get_fill_color="color", stroked=True,
+        get_radius="radius", get_fill_color="[cr, cg, cb, ca]", stroked=True,
         get_line_color=[0,0,0,60], line_width_min_pixels=1
     )
     tile_layer = None
@@ -685,20 +688,28 @@ with tab_map:
         # FIX 6: dynamic_layers() now consistently uses the `sensors_df` parameter
         # for the heat-map path coloring instead of accidentally closing over the outer `sensors`.
         def dynamic_layers(tsr_list, train_pos, sensors_df, quality_macro):
-            # Risk heat along the path: pick nearest sensor label → color
+            # Risk heat along the path: one short segment per path-point, coloured by nearest sensor risk.
+            # FIX: PathLayer cannot handle a list-of-lists in a "colors" column.
+            # Instead we emit one row per consecutive pair of path-points, each with flat [r,g,b,a] ints.
             if isinstance(sensors_df, pd.DataFrame) and not sensors_df.empty and "label" in sensors_df.columns:
                 latv = sensors_df["lat"].values; lonv = sensors_df["lon"].values
-                path_np = np.array(static_path_coords)  # [lon, lat]
+                path_np = np.array(static_path_coords)  # shape (N,2) [lon,lat]
                 d2 = ( (path_np[:,1][:,None] - latv[None,:])**2 + (path_np[:,0][:,None] - lonv[None,:])**2 )
                 j = np.argmin(d2, axis=1)
-                labels = sensors_df["label"].values[j]  # FIX 6: use sensors_df, not outer sensors
+                labels = sensors_df["label"].values[j]
                 col_map = {"low":CBL["green"]+[180], "medium":CBL["orange"]+[200], "high":CBL["red"]+[220]}
-                heat = [col_map.get(lbl, CBL["green"]+[180]) for lbl in labels]
+                pt_colors = [col_map.get(lbl, CBL["green"]+[180]) for lbl in labels]
             else:
-                heat = [CBL["green"]+[180] for _ in static_path_coords]
-            heat_df = pd.DataFrame([{"path":static_path_coords, "colors":heat}])
+                pt_colors = [CBL["green"]+[180] for _ in static_path_coords]
+            # Build segment rows: [[lon0,lat0],[lon1,lat1]] with the color of point0
+            heat_rows = []
+            for i in range(len(static_path_coords)-1):
+                c = pt_colors[i]
+                heat_rows.append({"path": [static_path_coords[i], static_path_coords[i+1]],
+                                   "cr": c[0], "cg": c[1], "cb": c[2], "ca": c[3]})
+            heat_df = pd.DataFrame(heat_rows)
             heat_layer = pdk.Layer("PathLayer", data=heat_df, get_path="path",
-                                   get_color="colors", width_scale=4, width_min_pixels=3)
+                                   get_color="[cr, cg, cb, ca]", width_scale=4, width_min_pixels=3)
 
             # Sensors glyphs
             vis=[]
@@ -711,11 +722,13 @@ with tab_map:
                     elif modality == "HYBRID": color = CBL["cyan"]+[255]
                     elif modality == "SEMANTIC": color = CBL["purple"]+[255]
                     else: color = {"GOOD":CBL["green"]+[230],"PATCHY":CBL["orange"]+[230],"POOR":CBL["red"]+[230]}.get(qualS,CBL["gray"]+[220])
-                    vis.append({"sid":r.sid,"lon":float(r.lon),"lat":float(r.lat),"color":color,
+                    # FIX: store as separate int columns; pydeck can't parse list-typed columns
+                    vis.append({"sid":r.sid,"lon":float(r.lon),"lat":float(r.lat),
+                                "cr":color[0],"cg":color[1],"cb":color[2],"ca":color[3],
                                 "tooltip":f"{r.sid} • {label} • {qualS} • {modality or '—'}"})
             sens_vis_df = pd.DataFrame(vis)
             sens_layer = pdk.Layer("ScatterplotLayer", data=sens_vis_df, get_position='[lon, lat]',
-                                   get_fill_color='color', get_radius=2800, stroked=True,
+                                   get_fill_color='[cr, cg, cb, ca]', get_radius=2800, stroked=True,
                                    get_line_color=[0,0,0], line_width_min_pixels=1.2, pickable=True)
             text_layer = pdk.Layer("TextLayer", data=sens_vis_df, get_position='[lon, lat]', get_text='sid',
                                    get_size=14, get_color=[20,20,20], size_units="pixels")
