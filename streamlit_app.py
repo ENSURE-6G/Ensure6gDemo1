@@ -259,19 +259,7 @@ def tsr_poly(clat,clon,length_m=1500,half_w=18):
             [p1.x-half_w*m2lon*nx,p1.y-half_w*m2lat*ny]]
 
 # ── Coverage ring polygon (cheap, no ScatterplotLayer fill blobs) ──────────
-def _circle_poly(lat,lon,r_m,n=36):
-    m2lat=1/111111.0; m2lon=1/(111111.0*math.cos(math.radians(lat)))
-    return [[lon+r_m*m2lon*math.cos(2*math.pi*i/n),
-             lat+r_m*m2lat*math.sin(2*math.pi*i/n)] for i in range(n)]
-
-# ── PERF-4: Static layers cached by (SECS, hash of first/last lat/lon) ─────
-@st.cache_data(show_spinner=False)
-def build_static_layers(SECS, route_hash):
-    """route_hash is (first_lat, first_lon, last_lat, last_lon, SECS) — cheap key."""
-    # Rebuild route_df from session state can't be done inside cached fn,
-    # so we pass path_coords directly via a secondary non-cached helper.
-    return None  # placeholder; actual work in _build_layers_inner
-
+# ── PERF-4: Static layers cached by tuple key ─────────────────────────────
 @st.cache_data(show_spinner=False)
 def build_layers_cached(path_coords_tuple, secs_key):
     """
@@ -292,22 +280,32 @@ def build_layers_cached(path_coords_tuple, secs_key):
                          stroked=True, get_line_color=[255,255,255,160],
                          line_width_min_pixels=1, pickable=True)
 
-    # Coverage rings — PolygonLayer outlines, very light fill
-    ring_rows=[]
-    for name,lat,lon,r_m in BASE_STATIONS:
-        for color_key,radius,fa,la in [
-            ("ring_good",r_m,12,160),
-            ("ring_patchy",r_m*2.2,8,120),
-            ("ring_poor",r_m*3.0,5,90),
+    # Coverage rings — stroke-ONLY ScatterplotLayer circles (no fill = no white blobs).
+    # Three concentric rings per BS: GOOD / PATCHY / POOR radii.
+    # pydeck ScatterplotLayer with filled=False, stroked=True draws only the outline.
+    ring_rows = []
+    for name, lat, lon, r_m in BASE_STATIONS:
+        for (cr,cg,cb), radius in [
+            (C["ring_good"],  r_m),
+            (C["ring_patchy"], int(r_m * 2.2)),
+            (C["ring_poor"],   int(r_m * 3.0)),
         ]:
-            rgb=C[color_key]
-            ring_rows.append({"polygon":_circle_poly(lat,lon,radius),
-                               "fr":rgb[0],"fg":rgb[1],"fb":rgb[2],"fa":fa,
-                               "lr":rgb[0],"lg":rgb[1],"lb":rgb[2],"la":la})
-    rings_df=pd.DataFrame(ring_rows)
-    rings_layer=pdk.Layer("PolygonLayer", data=rings_df, get_polygon="polygon",
-                          get_fill_color="[fr,fg,fb,fa]", get_line_color="[lr,lg,lb,la]",
-                          stroked=True, filled=True, line_width_min_pixels=1)
+            ring_rows.append({
+                "lat": lat, "lon": lon, "radius": radius,
+                "cr": cr, "cg": cg, "cb": cb, "ca": 180,
+            })
+    rings_df = pd.DataFrame(ring_rows)
+    rings_layer = pdk.Layer(
+        "ScatterplotLayer", data=rings_df,
+        get_position="[lon, lat]",
+        get_radius="radius",
+        get_fill_color=[0, 0, 0, 0],       # fully transparent fill — NO blobs
+        get_line_color="[cr, cg, cb, ca]",  # coloured outline only
+        filled=False,
+        stroked=True,
+        line_width_min_pixels=1,
+        line_width_max_pixels=2,
+    )
 
     return track_layer, bs_layer, rings_layer, path_coords
 
