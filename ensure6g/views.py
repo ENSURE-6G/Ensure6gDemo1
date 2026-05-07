@@ -4,10 +4,9 @@ import math
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-import pydeck as pdk
 import streamlit as st
 
-from ensure6g.core import build_heat_index, build_layers_cached
+from ensure6g.core import BASE_STATIONS, build_heat_index
 from ensure6g.core import _poly_key, _tsr_key_set
 from ensure6g.theme import C, CHART_COLORS, CHART_LAYOUT, PAL
 from ensure6g.thermal_data import DEMO_EVENT_TICK, thermal_frame_celsius
@@ -841,6 +840,168 @@ def render_header_and_timeline(frame, secs, route_df=None):
                 st.session_state.train_v_ms = 0.0
 
 
+def _rgba(color, alpha=1.0):
+    r, g, b = color[:3]
+    return f"rgba({int(r)},{int(g)},{int(b)},{alpha})"
+
+
+def _coverage_ring(lat, lon, radius_m, points=96):
+    angles = np.linspace(0, 2 * np.pi, points)
+    lat_scale = 1 / 111_111.0
+    lon_scale = 1 / (111_111.0 * math.cos(math.radians(lat)))
+    lats = lat + np.sin(angles) * radius_m * lat_scale
+    lons = lon + np.cos(angles) * radius_m * lon_scale
+    return lats, lons
+
+
+def _add_geo_trace(fig, lon, lat, name, color, width=2, mode="lines", fill=None, text=None, size=None):
+    fig.add_trace(
+        go.Scattergeo(
+            lon=lon,
+            lat=lat,
+            mode=mode,
+            name=name,
+            line=dict(color=color, width=width),
+            marker=dict(color=color, size=size or 7, line=dict(color="rgba(230,237,243,.55)", width=1)),
+            fill=fill,
+            fillcolor=color if fill else None,
+            text=text,
+            hovertemplate="%{text}<extra></extra>" if text is not None else "%{fullData.name}<extra></extra>",
+            textfont=dict(color="#E6EDF3", size=10),
+        )
+    )
+
+
+def _render_cloud_safe_map(frame, route_df, secs, tsr_list, title, tms_view=False):
+    """Token-free map rendering for hosted Streamlit deployments."""
+    step = max(1, secs // 360)
+    path_coords = [(float(route_df.lon.iloc[i]), float(route_df.lat.iloc[i])) for i in range(0, secs, step)]
+    path_coords_tuple = tuple(path_coords)
+    heat_j = build_heat_index(path_coords_tuple, frame["s_lats"], frame["s_lons"])
+    lbls = frame["sensors"]["label"].values[heat_j]
+    risk_colors = {"low": _rgba(C["good"], 0.72), "medium": _rgba(C["patchy"], 0.82), "high": _rgba(C["poor"], 0.94)}
+
+    fig = go.Figure()
+    for name, lat, lon, radius in BASE_STATIONS:
+        for color, ring_radius in [
+            (_rgba(C["ring_good"], 0.28), radius),
+            (_rgba(C["ring_patchy"], 0.22), int(radius * 2.2)),
+            (_rgba(C["ring_poor"], 0.16), int(radius * 3.0)),
+        ]:
+            ring_lats, ring_lons = _coverage_ring(lat, lon, ring_radius)
+            _add_geo_trace(fig, ring_lons, ring_lats, f"{name} coverage", color, width=1)
+
+    for i in range(len(path_coords) - 1):
+        _add_geo_trace(
+            fig,
+            [path_coords[i][0], path_coords[i + 1][0]],
+            [path_coords[i][1], path_coords[i + 1][1]],
+            "rail risk overlay",
+            risk_colors.get(lbls[i], risk_colors["low"]),
+            width=4,
+        )
+
+    _add_geo_trace(
+        fig,
+        [pt[0] for pt in path_coords],
+        [pt[1] for pt in path_coords],
+        "rail corridor",
+        _rgba(C["track"], 0.95),
+        width=2,
+    )
+
+    for p in tsr_list:
+        poly = list(p["polygon"])
+        closed = poly + [poly[0]]
+        _add_geo_trace(
+            fig,
+            [pt[0] for pt in closed],
+            [pt[1] for pt in closed],
+            f"TSR {p['speed']} km/h",
+            _rgba(C["gold"], 0.35),
+            width=2,
+            fill="toself",
+            text=[f"TSR {p['speed']} km/h{' STOP' if p.get('stop') else ''}"] * len(closed),
+        )
+
+    fig.add_trace(
+        go.Scattergeo(
+            lon=[b[2] for b in BASE_STATIONS],
+            lat=[b[1] for b in BASE_STATIONS],
+            mode="markers",
+            name="base stations",
+            marker=dict(size=8, color=_rgba(C["raw"], 0.95), symbol="circle", line=dict(color="#E6EDF3", width=1)),
+            text=[f"{name}<br>Base station" for name, *_ in BASE_STATIONS],
+            hovertemplate="%{text}<extra></extra>",
+        )
+    )
+
+    sensors = frame["sensors"].copy()
+    mode_color = {"RAW": C["raw"], "HYBRID": C["hybrid"], "SEMANTIC": C["semantic"]}
+    sensor_colors = [_rgba(mode_color.get(row.modality, C["good"]), 0.95) for row in sensors.itertuples()]
+    sensor_sizes = [13 if row.label == "high" else (10 if row.label == "medium" else 8) for row in sensors.itertuples()]
+    sensor_text = [
+        f"{row.sid}<br>Risk: {row.label}<br>Mode: {row.modality}<br>Link: {row.qualS}<br>Temp: {row.temp:.1f} C"
+        for row in sensors.itertuples()
+    ]
+    fig.add_trace(
+        go.Scattergeo(
+            lon=sensors["lon"],
+            lat=sensors["lat"],
+            mode="markers+text",
+            name="sensors",
+            marker=dict(size=sensor_sizes, color=sensor_colors, line=dict(color="rgba(230,237,243,.65)", width=1)),
+            text=sensors["sid"],
+            textposition="top center",
+            textfont=dict(color="#E6EDF3", size=9),
+            customdata=sensor_text,
+            hovertemplate="%{customdata}<extra></extra>",
+        )
+    )
+
+    train_color = _rgba({"GOOD": C["good"], "PATCHY": C["patchy"], "POOR": C["poor"]}.get(frame["quality"], C["good"]), 1.0)
+    fig.add_trace(
+        go.Scattergeo(
+            lon=[frame["trainA"][1]],
+            lat=[frame["trainA"][0]],
+            mode="markers+text",
+            name="train",
+            marker=dict(size=18, color=train_color, symbol="diamond", line=dict(color="#FFFFFF", width=2)),
+            text=["TRAIN"],
+            textposition="bottom center",
+            textfont=dict(color="#E6EDF3", size=10),
+            hovertemplate=f"Train<br>Link: {frame['quality']}<br>Bearer: {frame['bearer']}<extra></extra>",
+        )
+    )
+
+    fig.update_geos(
+        projection_type="mercator",
+        showland=True,
+        landcolor="#101820",
+        showocean=True,
+        oceancolor="#08111A",
+        showlakes=True,
+        lakecolor="#08111A",
+        showcountries=True,
+        countrycolor="#303A46",
+        coastlinecolor="#303A46",
+        showframe=False,
+        lonaxis=dict(range=[16.75, 18.35]),
+        lataxis=dict(range=[59.2, 62.55]),
+        bgcolor="#0D1117",
+    )
+    fig.update_layout(
+        height=500,
+        margin=dict(l=0, r=0, t=34, b=0),
+        title=dict(text=title, font=dict(color="#E6EDF3", size=13)),
+        paper_bgcolor="#0D1117",
+        plot_bgcolor="#0D1117",
+        legend=dict(orientation="h", y=0.01, x=0.01, font=dict(color="#8B949E", size=9), bgcolor="rgba(13,17,23,.65)"),
+        showlegend=not tms_view,
+    )
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+
 def render_tabs(frame, route_df, secs):
     arr = st.session_state.arr
     x = np.arange(secs)
@@ -931,120 +1092,13 @@ def render_tabs(frame, route_df, secs):
                     )
 
         with map_col:
-            step = max(1, secs // 400)
-            path_coords_tuple = tuple((float(route_df.lon.iloc[i]), float(route_df.lat.iloc[i])) for i in range(0, secs, step))
-            track_layer, bs_layer, rings_layer, path_coords = build_layers_cached(path_coords_tuple, secs)
-
-            heat_j = build_heat_index(path_coords_tuple, frame["s_lats"], frame["s_lons"])
-            lbls = frame["sensors"]["label"].values[heat_j]
-            cmap = {"low": C["good"][:3] + [100], "medium": C["patchy"][:3] + [150], "high": C["poor"][:3] + [190]}
-            heat_rows = []
-            for i in range(len(path_coords) - 1):
-                c = cmap.get(lbls[i], C["good"][:3] + [100])
-                heat_rows.append({"path": [path_coords[i], path_coords[i + 1]], "cr": c[0], "cg": c[1], "cb": c[2], "ca": c[3]})
-            heat_df = pd.DataFrame(heat_rows)
-            heat_layer = pdk.Layer("PathLayer", data=heat_df, get_path="path", get_color="[cr,cg,cb,ca]", width_min_pixels=5, width_scale=3)
-
-            def s_color(row):
-                m = getattr(row, "modality", "RAW")
-                if m == "RAW":
-                    return C["raw"]
-                if m == "HYBRID":
-                    return C["hybrid"]
-                if m == "SEMANTIC":
-                    return C["semantic"]
-                return {"GOOD": C["good"], "PATCHY": C["patchy"], "POOR": C["poor"]}.get(getattr(row, "qualS", "GOOD"), C["good"])
-
-            sens_rows = []
-            for row in frame["sensors"].itertuples():
-                c = s_color(row)
-                lbl = getattr(row, "label", "low")
-                rad = 2200 if lbl == "high" else (1800 if lbl == "medium" else 1400)
-                sens_rows.append(
-                    {
-                        "lat": float(row.lat),
-                        "lon": float(row.lon),
-                        "sid": row.sid,
-                        "cr": c[0],
-                        "cg": c[1],
-                        "cb": c[2],
-                        "ca": c[3],
-                        "radius": rad,
-                        "tooltip": f"{row.sid} | {lbl} | {getattr(row, 'qualS', '')} | {getattr(row, 'modality', '')}",
-                    }
-                )
-            sens_df = pd.DataFrame(sens_rows)
-            s_layer = pdk.Layer(
-                "ScatterplotLayer",
-                data=sens_df,
-                get_position="[lon,lat]",
-                get_fill_color="[cr,cg,cb,ca]",
-                get_radius="radius",
-                radius_min_pixels=4,
-                radius_max_pixels=14,
-                stroked=True,
-                get_line_color=[255, 255, 255, 80],
-                line_width_min_pixels=1,
-                pickable=True,
-            )
-            txt_layer = pdk.Layer(
-                "TextLayer",
-                data=sens_df,
-                get_position="[lon,lat]",
-                get_text="sid",
-                get_size=11,
-                get_color=[220, 220, 220, 200],
-                get_pixel_offset=[0, -18],
-                size_units="pixels",
-            )
-
-            def make_tsr_layer(lst):
-                if not lst:
-                    return pdk.Layer("PolygonLayer", data=[], get_polygon="polygon", get_fill_color=[0, 0, 0, 0])
-                return pdk.Layer(
-                    "PolygonLayer",
-                    data=[{"polygon":p["polygon"],"tooltip":f"TSR {p['speed']}km/h{'  🛑 STOP' if p.get('stop') else ''}"} for p in lst],
-                    get_polygon="polygon",
-                    get_fill_color=C["gold"],
-                    get_line_color=C["gold_ln"],
-                    stroked=True,
-                    filled=True,
-                    line_width_min_pixels=2,
-                    pickable=True,
-                )
-
-            halo_c = {"GOOD": C["good"], "PATCHY": C["patchy"], "POOR": C["poor"]}.get(frame["quality"], C["good"])
-            halo_df = pd.DataFrame([{"lat": frame["trainA"][0], "lon": frame["trainA"][1], "cr": halo_c[0], "cg": halo_c[1], "cb": halo_c[2], "ca": 55}])
-            halo_l = pdk.Layer("ScatterplotLayer", data=halo_df, get_position="[lon,lat]", get_fill_color="[cr,cg,cb,ca]", get_radius=1600, radius_min_pixels=8, radius_max_pixels=22)
-            train_df = pd.DataFrame(
-                [
-                    {
-                        "lat": frame["trainA"][0],
-                        "lon": frame["trainA"][1],
-                        "icon": {"url": "https://img.icons8.com/emoji/96/railway-car.png", "width": 96, "height": 96, "anchorY": 96},
-                    }
-                ]
-            )
-            icon_l = pdk.Layer("IconLayer", data=train_df, get_position="[lon,lat]", get_icon="icon", get_size=4, size_scale=12)
-            view = pdk.ViewState(latitude=60.7, longitude=17.5, zoom=6.2, pitch=0)
-            MAP_STYLE = "https://basemaps.cartocdn.com/gl/dark-matter-nolabels-gl-style/style.json"
-            TOOLTIP = {"html":"<b>{tooltip}</b>","style":{"background":"rgba(13,17,23,.92)","color":"#E6EDF3","font-family":"IBM Plex Mono","font-size":"11px","border-radius":"6px","padding":"6px 10px"}}
-
-            def make_deck(tsr_list):
-                return pdk.Deck(
-                    layers=[rings_layer, track_layer, heat_layer, make_tsr_layer(tsr_list), bs_layer, halo_l, s_layer, txt_layer, icon_l],
-                    initial_view_state=view,
-                    map_style=MAP_STYLE,
-                    tooltip=TOOLTIP,
-                )
-
             rw_col, tms_col = st.columns(2, gap="small")
             with rw_col:
                 st.markdown('<div class="map-lbl">⬤ Real World</div>', unsafe_allow_html=True)
-                st.pydeck_chart(make_deck(st.session_state.tsr_real), use_container_width=True, height=500)
+                _render_cloud_safe_map(frame, route_df, secs, st.session_state.tsr_real, "Real-world rail corridor")
             with tms_col:
                 st.markdown('<div class="map-lbl map-lbl-tms">⬤ TMS View</div>', unsafe_allow_html=True)
-                st.pydeck_chart(make_deck(st.session_state.tsr_tms), use_container_width=True, height=500)
+                _render_cloud_safe_map(frame, route_df, secs, st.session_state.tsr_tms, "TMS-known rail corridor", tms_view=True)
 
     with tab_tele:
         c1, c2 = st.columns(2, gap="medium")
