@@ -515,64 +515,52 @@ def _render_demo_tab(frame):
     near_event = abs(int(st.session_state.get("t_idx", 0)) - DEMO_EVENT_TICK) <= 2
     tms_action = event.get("recommended_action") == "issue_tsr" and thermal.get("delivered_to_tms")
 
-    st.markdown("<div class='sec-hdr'>Presenter Script</div>", unsafe_allow_html=True)
+    steps = [
+        {
+            "name": "Baseline",
+            "tag": "RAW Image/Data",
+            "talk": "Normal network. Show the railway thermal frame and explain the raw payload cost.",
+            "expect": "Full sensor context is available, but this is the heaviest transfer.",
+            "active": current_scenario == "Good signal" and current_mode == "RAW",
+        },
+        {
+            "name": "Network Stress",
+            "tag": "RAW Under Stress",
+            "talk": "Adverse network. The same image/data transfer becomes fragile.",
+            "expect": "The TMS may receive late, partial, or missing visual evidence.",
+            "active": current_scenario == "Adverse" and current_mode == "RAW",
+        },
+        {
+            "name": "Semantic Safety",
+            "tag": "Meaning + Action",
+            "talk": "Transmit the safety meaning instead of the full frame.",
+            "expect": "Frame 330 produces high risk, confidence 0.86, and TMS action issue_tsr.",
+            "active": current_scenario == "Adverse" and current_mode == "SEMANTIC",
+        },
+    ]
+
+    current_step = next((step for step in steps if step["active"]), steps[0])
+    action_label = event.get("recommended_action", "monitor")
+    delivery_label = "DELIVERED" if thermal.get("delivered_to_tms") else ("DROPPED" if event.get("risk_label") != "low" else "NOMINAL")
+    tms_label = "TSR ISSUED" if tms_action else ("MONITOR" if event.get("risk_label") == "low" else "ACTION PENDING")
+
     st.markdown(
-        """
-<div class="demo-card">
-  <div class="demo-title">Goal</div>
-  <div class="demo-copy">Show that collected thermal camera data can be compressed into a semantic event and still drive a TMS safety action when the network is degraded.</div>
+        f"""
+<div class="guided-hero">
+  <div>
+    <div class="guided-eyebrow">ENSURE-6G industry demo</div>
+    <div class="guided-title">Track thermal sensing -> 6G transfer -> TMS decision</div>
+    <div class="guided-lede">A railway thermal sensor detects track conditions. The demo compares RAW image/data, HYBRID preview + metadata, and SEMANTIC meaning-only transfer to show what the TMS can actually use under network stress.</div>
+  </div>
+  <div class="guided-live">
+    <span>Current chapter</span>
+    <b>{current_step['name']}</b>
+    <small>{current_step['tag']}</small>
+  </div>
 </div>
 """,
         unsafe_allow_html=True,
     )
-
-    steps = [
-        {
-            "name": "1. Baseline",
-            "sidebar": "Click Baseline in the sidebar.",
-            "talk": "Start with normal radio conditions and show the collected thermal frame plus raw payload cost.",
-            "expect": "Thermal data is visible; TMS state is nominal or low-pressure.",
-            "active": current_scenario == "Good signal" and current_mode == "RAW",
-        },
-        {
-            "name": "2. Network Stress",
-            "sidebar": "Click Stress in the sidebar.",
-            "talk": "Move to adverse network conditions and explain that full-frame thermal payloads are more fragile under load.",
-            "expect": "The same thermal event is harder to deliver reliably as raw data.",
-            "active": current_scenario == "Adverse" and current_mode == "RAW",
-        },
-        {
-            "name": "3. Semantic Safety",
-            "sidebar": "Click Semantic in the sidebar.",
-            "talk": "Switch to semantic communication: transmit event meaning instead of the full thermal frame.",
-            "expect": "Frame 330 produces high risk, confidence about 0.86, and TMS action issue_tsr.",
-            "active": current_scenario == "Adverse" and current_mode == "SEMANTIC",
-        },
-    ]
-    cols = st.columns(3, gap="medium")
-    for col, step in zip(cols, steps):
-        state_cls = "s-ok" if step["active"] else "s-warn"
-        state_label = "CURRENT" if step["active"] else "READY"
-        with col:
-            st.markdown(
-                f"""
-<div class="demo-card">
-  <div class="demo-title">{step['name']}</div>
-  <div class="{state_cls}" style="margin:6px 0">{state_label}</div>
-  <div class="demo-copy"><b>Action:</b> {step['sidebar']}</div>
-  <div class="demo-copy"><b>Say:</b> {step['talk']}</div>
-  <div class="demo-copy"><b>Expected:</b> {step['expect']}</div>
-</div>
-""",
-                unsafe_allow_html=True,
-            )
-
-    st.markdown("<div class='sec-hdr'>Current Script Check</div>", unsafe_allow_html=True)
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Scenario", current_scenario)
-    c2.metric("Mode", current_mode)
-    c3.metric("At event frame", "YES" if near_event else "NO")
-    c4.metric("TMS action", "YES" if tms_action else "NO")
 
     if not thermal.get("available"):
         st.markdown(
@@ -582,15 +570,116 @@ def _render_demo_tab(frame):
         )
         return
 
-    risk_cls = "s-ok" if event.get("risk_label") == "high" else "s-warn"
-    delivery_cls = "s-ok" if thermal.get("delivered_to_tms") else "s-crit"
-    action_cls = "s-ok" if tms_action else "s-warn"
+    preview_path = thermal.get("preview_path")
+    risk_cls = "high" if event.get("risk_label") == "high" else ("medium" if event.get("risk_label") == "medium" else "low")
+    rows = _mode_rows(thermal)
+    raw_row = _mode_row(rows, "RAW")
+    hybrid_row = _mode_row(rows, "HYBRID")
+    semantic_row = _mode_row(rows, "SEMANTIC")
+
+    visual_col, decision_col = st.columns([1.15, 1], gap="large")
+    with visual_col:
+        st.markdown("<div class='guided-panel-title'>1. Sensor sees the railway</div>", unsafe_allow_html=True)
+        if preview_path:
+            st.image(preview_path, caption=f"P2 Pro railway thermal preview | frame {thermal['frame_id']}", use_container_width=True)
+        else:
+            temp_c = thermal_frame_celsius(thermal["frame_path"])
+            st.plotly_chart(
+                _thermal_preview_figure(
+                    temp_c,
+                    hotspot=(thermal["hotspot_x"], thermal["hotspot_y"]),
+                    title=f"Raw thermal matrix | frame {thermal['frame_id']}",
+                ),
+                use_container_width=True,
+                config={"displayModeBar": False},
+            )
+        st.markdown(
+            f"""
+<div class="guided-facts">
+  <div><span>Frame</span><b>{thermal['frame_id']}</b></div>
+  <div><span>P99</span><b>{thermal['p99_temp_c']:.1f} C</b></div>
+  <div><span>Delta</span><b>{thermal['delta_temp_c']:.1f} C</b></div>
+  <div><span>Risk</span><b class="risk-{risk_cls}">{event.get('risk_label', 'low').upper()}</b></div>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+
+    with decision_col:
+        st.markdown("<div class='guided-panel-title'>2. TMS receives what the network delivers</div>", unsafe_allow_html=True)
+        st.markdown(
+            f"""
+<div class="guided-decision-card">
+  <div class="guided-decision-top">
+    <span>Transfer mode</span>
+    <b>{current_mode}</b>
+  </div>
+  <div class="guided-outcome {risk_cls}">
+    <span>Semantic risk</span>
+    <b>{event.get('risk_label', 'low').upper()}</b>
+  </div>
+  <div class="semantic-packet">
+    <div><span>Confidence</span><b>{event.get('confidence', 0):.2f}</b></div>
+    <div><span>Delivery</span><b>{delivery_label}</b></div>
+    <div><span>Action</span><b>{action_label}</b></div>
+    <div><span>TMS result</span><b>{tms_label}</b></div>
+  </div>
+  <div class="guided-decision-copy">Use the sidebar preset buttons to move through the story. The strongest proof point is Semantic Safety: small payload, high-risk event, and direct TMS action.</div>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("<div class='guided-panel-title'>3. Compare what each mode gives the receiver</div>", unsafe_allow_html=True)
+    mode_cards = [
+        ("RAW Image/Data", "RAW", raw_row, "Full railway image and temperature matrix", "TMS must process the image before action."),
+        ("Preview + Metadata", "HYBRID", hybrid_row, "Small railway preview plus event fields", "TMS gets visual context and structured hints."),
+        ("Meaning + Action", "SEMANTIC", semantic_row, "Risk, confidence, frame, recommended action", "TMS can act directly when thresholds pass."),
+    ]
+    cols = st.columns(3, gap="medium")
+    for col, (title, mode, row, received, decision) in zip(cols, mode_cards):
+        delivered = bool(row.get("delivered"))
+        payload = int(row.get("payload_bytes", 0))
+        active_cls = " active" if mode == current_mode else ""
+        status_cls = "ok" if delivered else "bad"
+        with col:
+            st.markdown(
+                f"""
+<div class="guided-mode-card {mode.lower()}{active_cls}">
+  <div class="guided-mode-head">
+    <span>{title}</span>
+    <b>{_fmt_bytes(payload)}</b>
+  </div>
+  <div class="guided-mode-stage"><span>Sensor sends</span><b>{received}</b></div>
+  <div class="guided-mode-stage {status_cls}"><span>TMS receives</span><b>{'Received' if delivered else 'Missing or degraded'}</b></div>
+  <div class="guided-mode-stage"><span>Decision</span><b>{decision}</b></div>
+</div>
+""",
+                unsafe_allow_html=True,
+            )
+
+    st.markdown("<div class='guided-panel-title'>Presenter path</div>", unsafe_allow_html=True)
+    cols = st.columns(3, gap="medium")
+    for col, step in zip(cols, steps):
+        state_cls = "current" if step["active"] else "ready"
+        with col:
+            st.markdown(
+                f"""
+<div class="guided-step-card {state_cls}">
+  <div class="guided-step-name">{step['name']}</div>
+  <div class="guided-step-tag">{step['tag']}</div>
+  <div class="guided-step-copy"><b>Say:</b> {step['talk']}</div>
+  <div class="guided-step-copy"><b>Expected:</b> {step['expect']}</div>
+</div>
+""",
+                unsafe_allow_html=True,
+            )
+
+    status_cls = "s-ok" if tms_action else ("s-warn" if near_event else "s-warn")
     st.markdown(
         f"""
-<div class="demo-check-grid">
-  <div class="{risk_cls}">Thermal risk: {event.get('risk_label', 'unknown').upper()} | frame {thermal.get('frame_id')}</div>
-  <div class="{delivery_cls}">Semantic delivery: {'DELIVERED' if thermal.get('delivered_to_tms') else 'NOT DELIVERED'} | loss {thermal.get('delivery_loss', 0)*100:.0f}%</div>
-  <div class="{action_cls}">Recommended action: {event.get('recommended_action', 'monitor')}</div>
+<div class="guided-check-strip">
+  <div class="{status_cls}">Script check: scenario={current_scenario} | mode={current_mode} | event frame={'YES' if near_event else 'NO'} | TMS action={'YES' if tms_action else 'NO'}</div>
 </div>
 """,
         unsafe_allow_html=True,

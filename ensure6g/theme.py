@@ -90,6 +90,47 @@ div[data-testid="metric-container"] [data-testid="stMetricValue"]{{color:{PAL['c
 .demo-copy b{{color:{PAL['muted']};font-family:'IBM Plex Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:.06em}}
 .demo-check-grid{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:8px}}
 @media (max-width:900px){{.demo-check-grid{{grid-template-columns:1fr}}}}
+.guided-hero{{display:grid;grid-template-columns:minmax(0,1fr) 240px;gap:18px;align-items:stretch;background:radial-gradient(circle at top left,rgba(57,208,216,.16),transparent 34%),linear-gradient(135deg,rgba(22,27,34,.98),rgba(13,17,23,.94));border:1px solid {PAL['border']};border-radius:18px;padding:22px;margin:8px 0 18px;box-shadow:0 20px 50px rgba(0,0,0,.26)}}
+.guided-eyebrow{{font-family:'IBM Plex Mono',monospace;font-size:11px;color:{PAL['cyan']};text-transform:uppercase;letter-spacing:.14em;margin-bottom:8px}}
+.guided-title{{font-family:'IBM Plex Sans',sans-serif;font-size:31px;line-height:1.05;font-weight:600;color:{PAL['text']};max-width:780px}}
+.guided-lede{{font-size:14px;line-height:1.55;color:{PAL['muted']};max-width:860px;margin-top:12px}}
+.guided-live{{border:1px solid rgba(57,208,216,.32);border-radius:16px;background:rgba(57,208,216,.08);padding:16px;display:flex;flex-direction:column;justify-content:center}}
+.guided-live span{{font-family:'IBM Plex Mono',monospace;font-size:10px;color:{PAL['muted']};text-transform:uppercase;letter-spacing:.1em}}
+.guided-live b{{font-family:'IBM Plex Mono',monospace;font-size:21px;color:{PAL['cyan']};margin-top:8px}}
+.guided-live small{{font-family:'IBM Plex Mono',monospace;font-size:11px;color:{PAL['text']};margin-top:4px}}
+.guided-panel-title{{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;color:{PAL['muted']};text-transform:uppercase;letter-spacing:.12em;border-bottom:1px solid {PAL['border']};padding-bottom:6px;margin:18px 0 10px}}
+.guided-facts{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:10px}}
+.guided-facts div{{background:{PAL['surface']};border:1px solid {PAL['border']};border-radius:10px;padding:10px}}
+.guided-facts span,.guided-mode-stage span{{display:block;font-family:'IBM Plex Mono',monospace;font-size:10px;color:{PAL['muted']};text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}}
+.guided-facts b,.guided-mode-stage b{{font-family:'IBM Plex Mono',monospace;font-size:15px;color:{PAL['text']};word-break:break-word}}
+.risk-low{{color:{PAL['green']}!important}}.risk-medium{{color:{PAL['amber']}!important}}.risk-high{{color:{PAL['red']}!important}}
+.guided-decision-card{{background:linear-gradient(145deg,rgba(22,27,34,.98),rgba(13,17,23,.92));border:1px solid {PAL['border']};border-radius:16px;padding:16px;box-shadow:0 16px 38px rgba(0,0,0,.22)}}
+.guided-decision-top{{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}}
+.guided-decision-top span{{font-family:'IBM Plex Mono',monospace;font-size:10px;color:{PAL['muted']};text-transform:uppercase;letter-spacing:.1em}}
+.guided-decision-top b{{font-family:'IBM Plex Mono',monospace;font-size:20px;color:{PAL['purple']}}}
+.guided-outcome{{display:flex;align-items:center;justify-content:space-between;border-radius:12px;padding:12px;margin-bottom:12px}}
+.guided-outcome span{{font-family:'IBM Plex Mono',monospace;font-size:10px;color:{PAL['muted']};text-transform:uppercase;letter-spacing:.1em}}
+.guided-outcome b{{font-family:'IBM Plex Mono',monospace;font-size:20px}}
+.guided-outcome.low{{background:rgba(61,214,140,.11);border:1px solid rgba(61,214,140,.35);color:{PAL['green']}}}
+.guided-outcome.medium{{background:rgba(240,165,0,.12);border:1px solid rgba(240,165,0,.35);color:{PAL['amber']}}}
+.guided-outcome.high{{background:rgba(224,90,90,.14);border:1px solid rgba(224,90,90,.42);color:{PAL['red']}}}
+.guided-decision-copy{{font-size:13px;color:{PAL['muted']};line-height:1.45;margin-top:10px}}
+.guided-mode-card{{background:linear-gradient(150deg,rgba(22,27,34,.98),rgba(13,17,23,.92));border:1px solid {PAL['border']};border-radius:16px;padding:14px;min-height:250px;box-shadow:0 12px 30px rgba(0,0,0,.20)}}
+.guided-mode-card.raw{{border-top:3px solid #58A6FF}}.guided-mode-card.hybrid{{border-top:3px solid #3DD68C}}.guided-mode-card.semantic{{border-top:3px solid #B388FF}}
+.guided-mode-card.active{{box-shadow:0 18px 42px rgba(179,136,255,.16);border-color:rgba(179,136,255,.45)}}
+.guided-mode-head{{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px}}
+.guided-mode-head span{{font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:700;color:{PAL['text']}}}
+.guided-mode-head b{{font-family:'IBM Plex Mono',monospace;font-size:13px;color:{PAL['cyan']}}}
+.guided-mode-stage{{border:1px solid {PAL['border']};border-radius:10px;padding:10px;margin:8px 0;background:rgba(13,17,23,.45)}}
+.guided-mode-stage.ok{{border-color:rgba(61,214,140,.35);background:rgba(61,214,140,.08)}}.guided-mode-stage.bad{{border-color:rgba(224,90,90,.42);background:rgba(224,90,90,.09)}}
+.guided-step-card{{background:{PAL['surface']};border:1px solid {PAL['border']};border-radius:14px;padding:14px;min-height:160px}}
+.guided-step-card.current{{border-color:{PAL['cyan']};box-shadow:0 12px 30px rgba(57,208,216,.12)}}.guided-step-card.ready{{opacity:.82}}
+.guided-step-name{{font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:700;color:{PAL['cyan']};margin-bottom:5px}}
+.guided-step-tag{{font-family:'IBM Plex Mono',monospace;font-size:11px;color:{PAL['amber']};margin-bottom:10px}}
+.guided-step-copy{{font-size:13px;color:{PAL['text']};line-height:1.42;margin-top:6px}}
+.guided-step-copy b{{font-family:'IBM Plex Mono',monospace;font-size:10px;color:{PAL['muted']};text-transform:uppercase;letter-spacing:.06em}}
+.guided-check-strip{{margin:12px 0 4px}}
+@media (max-width:900px){{.guided-hero{{grid-template-columns:1fr}}.guided-facts{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}
 .transfer-card{{position:relative;overflow:hidden;background:radial-gradient(circle at top right,color-mix(in srgb,var(--mode-color) 24%,transparent),transparent 38%),linear-gradient(150deg,rgba(22,27,34,.98),rgba(13,17,23,.94));border:1px solid {PAL['border']};border-radius:16px;padding:16px;min-height:260px;box-shadow:0 16px 40px rgba(0,0,0,.26)}}
 .transfer-card:before{{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:linear-gradient(90deg,var(--mode-color),transparent)}}
 .transfer-active{{border-color:var(--mode-color);box-shadow:0 18px 48px color-mix(in srgb,var(--mode-color) 18%,transparent)}}
