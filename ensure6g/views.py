@@ -330,6 +330,57 @@ def _render_receiver_view(thermal, rows):
         st.markdown("</div>", unsafe_allow_html=True)
 
 
+def _render_receiver_summary(thermal, rows):
+    event = thermal.get("semantic_event", {})
+    summaries = [
+        (
+            "RAW",
+            "Sensor side",
+            "Full railway image + raw matrix",
+            "TMS side",
+            "Image processing required before action",
+            _mode_row(rows, "RAW"),
+        ),
+        (
+            "HYBRID",
+            "Sensor side",
+            "Preview + event metadata",
+            "TMS side",
+            "Visual context plus structured hints",
+            _mode_row(rows, "HYBRID"),
+        ),
+        (
+            "SEMANTIC",
+            "Sensor side",
+            "Meaning-only event packet",
+            "TMS side",
+            f"Direct action: {event.get('recommended_action', 'monitor')}",
+            _mode_row(rows, "SEMANTIC"),
+        ),
+    ]
+    st.markdown("<div class='sec-hdr'>Receiver Result Summary</div>", unsafe_allow_html=True)
+    cols = st.columns(3, gap="medium")
+    for col, (mode, sent_label, sent, recv_label, decision, row) in zip(cols, summaries):
+        delivered = bool(row.get("delivered"))
+        status = "RECEIVED" if delivered else "DROPPED"
+        status_cls = "ok" if delivered else "bad"
+        action_cls = "action" if row.get("tms_action") else ""
+        with col:
+            st.markdown(
+                f"""
+<div class="receiver-summary {mode.lower()} {status_cls} {action_cls}">
+  <div class="receiver-summary-head">
+    <span>{mode}</span>
+    <b>{status}</b>
+  </div>
+  <div class="receiver-summary-row"><small>{sent_label}</small><strong>{sent}</strong></div>
+  <div class="receiver-summary-row"><small>{recv_label}</small><strong>{decision}</strong></div>
+</div>
+""",
+                unsafe_allow_html=True,
+            )
+
+
 def _render_transfer_comparison(frame):
     thermal = frame.get("thermal", {})
     if not thermal.get("available"):
@@ -337,6 +388,7 @@ def _render_transfer_comparison(frame):
         return
 
     rows = _mode_rows(thermal)
+    event = thermal.get("semantic_event", {})
     active_mode = st.session_state.get("uplink_mode", "SEMANTIC")
     palette = {"RAW": "#58A6FF", "HYBRID": "#3DD68C", "SEMANTIC": "#B388FF"}
     labels = {
@@ -345,6 +397,24 @@ def _render_transfer_comparison(frame):
         "SEMANTIC": "Smallest payload, strongest safety path under network stress.",
     }
     raw_payload = max(int(thermal.get("payload_bytes", 1)), 1)
+
+    st.markdown(
+        f"""
+<div class="evidence-hero">
+  <div>
+    <div class="guided-eyebrow">Network evidence view</div>
+    <div class="evidence-title">Why semantic transfer survives network stress</div>
+    <div class="guided-lede">Compare what leaves the sensor, what survives the network, and what the TMS can use for a safety decision.</div>
+  </div>
+  <div class="evidence-kpis">
+    <div><span>Frame</span><b>{thermal.get('frame_id')}</b></div>
+    <div><span>Risk</span><b>{event.get('risk_label', 'low').upper()}</b></div>
+    <div><span>Action</span><b>{event.get('recommended_action', 'monitor')}</b></div>
+  </div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
 
     st.markdown("<div class='sec-hdr'>Thermal Data Transfer Modes</div>", unsafe_allow_html=True)
     card_cols = st.columns(3, gap="medium")
@@ -387,10 +457,13 @@ def _render_transfer_comparison(frame):
             )
 
     _render_transfer_payload_examples(thermal)
-    _render_receiver_view(thermal, rows)
+    _render_receiver_summary(thermal, rows)
+    with st.expander("Receiver / TMS detail", expanded=False):
+        _render_receiver_view(thermal, rows)
 
     chart_df = pd.DataFrame(rows)
     if not chart_df.empty:
+        st.markdown("<div class='sec-hdr'>Payload + Reliability Chart</div>", unsafe_allow_html=True)
         chart_df["payload_kb"] = chart_df["payload_bytes"] / 1024
         chart_df["reliability_pct"] = chart_df["reliability_pct"].fillna(0)
         fig = go.Figure()
@@ -420,7 +493,6 @@ def _render_transfer_comparison(frame):
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
     summary_cols = st.columns(4)
-    event = thermal.get("semantic_event", {})
     semantic_payload = max(int(thermal.get("semantic_payload_bytes", 1)), 1)
     summary_cols[0].metric("RAW frame", _fmt_bytes(raw_payload))
     summary_cols[1].metric("Semantic event", _fmt_bytes(semantic_payload))
@@ -977,7 +1049,7 @@ def render_tabs(frame, route_df, secs):
     with tab_flow:
         _render_transfer_comparison(frame)
 
-        st.markdown("<div class='sec-hdr'>Data Flow - Sensors -> BS -> TMS -> Train</div>", unsafe_allow_html=True)
+        st.markdown("<div class='sec-hdr'>Supporting Data Flow - Sensors -> BS -> TMS -> Train</div>", unsafe_allow_html=True)
         s_to_bs = max(1, frame["bps_total"])
         to_train = max(1, frame["laneA_bps"] + frame["laneB_bps"])
         to_maint = max(1, frame["laneB_bps"] or 100)
