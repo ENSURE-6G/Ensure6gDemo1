@@ -3,12 +3,14 @@ import streamlit as st
 from ensure6g.core import ShadowingTrack
 from ensure6g.theme import PAL
 from ensure6g.thermal_data import (
+    BUNDLED_P2PRO_DIR,
     DEMO_EVENT_TICK,
     P2PRO_DIR,
     P2PRO_SOURCE,
     SYNTHETIC_SOURCE,
     p2pro_data_available,
     resolve_thermal_source,
+    using_bundled_sample,
 )
 
 
@@ -181,6 +183,12 @@ def render_sidebar():
             st.markdown(
                 f"<div class='s-warn'>Collected thermal data not found at {P2PRO_DIR}. "
                 "Using synthetic fallback.</div>",
+                unsafe_allow_html=True,
+            )
+        elif using_bundled_sample():
+            st.markdown(
+                f"<div class='sidebar-hint'>Full external dataset not found at {P2PRO_DIR}. "
+                f"Using bundled demo thermal sample from {BUNDLED_P2PRO_DIR}.</div>",
                 unsafe_allow_html=True,
             )
 

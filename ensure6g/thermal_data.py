@@ -6,9 +6,13 @@ import numpy as np
 import streamlit as st
 
 
-THERMAL_ROOT = Path(__file__).resolve().parents[2] / "ThermalData"
+EXTERNAL_THERMAL_ROOT = Path(__file__).resolve().parents[2] / "ThermalData"
+BUNDLED_THERMAL_ROOT = Path(__file__).resolve().parent / "sample_data"
+THERMAL_ROOT = EXTERNAL_THERMAL_ROOT
 P2PRO_DIR = THERMAL_ROOT / "p2pro"
 P2PRO_PIC_DIR = THERMAL_ROOT / "p2proPic"
+BUNDLED_P2PRO_DIR = BUNDLED_THERMAL_ROOT / "p2pro"
+BUNDLED_P2PRO_PIC_DIR = BUNDLED_THERMAL_ROOT / "p2proPic"
 P2PRO_SOURCE = "Collected P2 Pro"
 SYNTHETIC_SOURCE = "Synthetic"
 SEMANTIC_BYTES_FALLBACK = 0
@@ -22,9 +26,25 @@ def _frame_number(path):
     return int(match.group(1)) if match else -1
 
 
+def _resolve_p2pro_dir(root_dir=None):
+    if root_dir is not None:
+        return Path(root_dir)
+    if P2PRO_DIR.exists() and any(P2PRO_DIR.glob("*.npy")):
+        return P2PRO_DIR
+    return BUNDLED_P2PRO_DIR
+
+
+def active_p2pro_dir(root_dir=None):
+    return _resolve_p2pro_dir(root_dir)
+
+
+def using_bundled_sample(root_dir=None):
+    return root_dir is None and active_p2pro_dir() == BUNDLED_P2PRO_DIR
+
+
 @st.cache_data(show_spinner=False)
 def list_p2pro_frames(root_dir=None):
-    frame_dir = Path(root_dir) if root_dir else P2PRO_DIR
+    frame_dir = _resolve_p2pro_dir(root_dir)
     if not frame_dir.exists():
         return []
     return [str(path) for path in sorted(frame_dir.glob("*.npy"), key=_frame_number)]
@@ -143,11 +163,12 @@ def current_thermal_stats(source, tick, root_dir=None):
             "source": P2PRO_SOURCE,
             "requested_source": source,
             "fallback_active": True,
-            "error": f"No P2 Pro .npy files found in {P2PRO_DIR}",
+            "error": f"No P2 Pro .npy files found in {P2PRO_DIR} or {BUNDLED_P2PRO_DIR}",
         }
 
     frame_path = frames[int(tick) % len(frames)]
     stats = thermal_frame_stats(frame_path)
     stats["frame_count"] = len(frames)
     stats["sequence_pos"] = int(tick) % len(frames)
+    stats["bundled_sample"] = using_bundled_sample(root_dir)
     return stats

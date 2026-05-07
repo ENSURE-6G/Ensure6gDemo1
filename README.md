@@ -84,6 +84,15 @@ temp_c = raw / 64.0 - 273.2
 
 If the local thermal dataset is not available, the app falls back to synthetic thermal data so the demo can still run.
 
+For Streamlit Cloud and other hosted deployments, the repository also includes a small bundled P2 Pro demo sample:
+
+```text
+ensure6g/sample_data/p2pro/p2img00330.npy
+ensure6g/sample_data/p2proPic/p2img00330.png
+```
+
+The app uses the full external dataset when it is available. If the full dataset is missing, it uses the bundled event frame so the thermal, semantic, and TMS proof point still works online.
+
 ## Local Setup
 
 Clone the repository:
