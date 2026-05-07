@@ -102,22 +102,49 @@ def render_sidebar():
         )
         st.markdown("---")
 
-        st.markdown("<div class='sec-hdr'>Demo Presets</div>", unsafe_allow_html=True)
-        p1, p2, p3 = st.columns(3)
-        if p1.button("Baseline", width="stretch"):
+        active_chapter = st.session_state.get("demo_preset", "Manual")
+        event_ready = abs(int(st.session_state.get("t_idx", 0)) - DEMO_EVENT_TICK) <= 2
+        tms_ready = (
+            st.session_state.get("scenario_preset") == "Adverse"
+            and st.session_state.get("uplink_mode") == "SEMANTIC"
+            and event_ready
+        )
+        st.markdown("<div class='sec-hdr'>Presenter Remote</div>", unsafe_allow_html=True)
+        st.markdown(
+            f"""
+<div class="sidebar-status">
+  <div><span>Chapter</span><b>{active_chapter}</b></div>
+  <div><span>Mode</span><b>{st.session_state.get('uplink_mode', 'SEMANTIC')}</b></div>
+  <div><span>Event Frame</span><b>{'READY' if event_ready else 'OFF'}</b></div>
+  <div><span>TMS Action</span><b>{'READY' if tms_ready else 'PENDING'}</b></div>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+
+        st.markdown("<div class='sec-hdr'>Story Chapters</div>", unsafe_allow_html=True)
+        if st.button("1 Baseline - RAW Image/Data", width="stretch"):
             apply_demo_preset("Baseline")
-        if p2.button("Stress", width="stretch"):
+        if st.button("2 Stress - RAW Under Load", width="stretch"):
             apply_demo_preset("Network Stress")
-        if p3.button("Semantic", width="stretch"):
+        if st.button("3 Semantic Safety - Meaning + Action", width="stretch"):
             apply_demo_preset("Semantic Safety")
 
-        st.markdown("<div class='sec-hdr'>Scenario</div>", unsafe_allow_html=True)
+        if st.button("Go to Event Frame 330", width="stretch"):
+            st.session_state.t_idx = DEMO_EVENT_TICK
+            st.session_state.train_v_ms = 0.0
+            st.session_state.playing = False
+        st.markdown(
+            "<div class='sidebar-hint'>Frame 330: high thermal risk semantic event used for the scripted TMS action.</div>",
+            unsafe_allow_html=True,
+        )
+
+        st.markdown("<div class='sec-hdr'>Operator Controls</div>", unsafe_allow_html=True)
         scenario_options = ["Good signal", "Mixed", "Adverse"]
         preset = st.selectbox(
-            "Preset",
+            "Network condition",
             scenario_options,
             key="scenario_preset",
-            label_visibility="collapsed",
         )
         if preset == "Good signal":
             def_min, def_TTT, def_HO, def_dc = 20, 1000, 200, True
@@ -128,7 +155,7 @@ def render_sidebar():
 
         sim_minutes = st.number_input("Duration (min)", 5, 120, def_min, 5)
         mode_options = ["RAW", "HYBRID", "SEMANTIC"]
-        mode = st.radio("Uplink mode", mode_options, key="uplink_mode", horizontal=True)
+        mode = st.radio("Transfer mode", mode_options, key="uplink_mode", horizontal=True)
 
         st.markdown("<div class='sec-hdr'>Thermal Input</div>", unsafe_allow_html=True)
         has_p2pro_data = p2pro_data_available()
@@ -144,42 +171,39 @@ def render_sidebar():
                 unsafe_allow_html=True,
             )
 
-        with st.expander("Radio controls", expanded=False):
+        st.markdown("<div class='sec-hdr'>Safety</div>", unsafe_allow_html=True)
+        tsr_conf = st.slider("Action threshold", 0.60, 0.95, 0.85, 0.01, key="tsr_conf")
+        tsr_speed = st.slider("TSR speed (km/h)", 30, 120, 60, 5)
+        stop_on_crit = st.checkbox("STOP at conf >= 0.92", key="stop_on_crit")
+
+        with st.expander("Advanced controls", expanded=False):
+            st.markdown("<div class='sec-hdr'>Radio / PHY</div>", unsafe_allow_html=True)
             laneA_reps = st.slider("Lane-A repetitions", 1, 3, 2)
             enable_dc = st.checkbox("Dual Connectivity", def_dc)
             dc_snr_delta = st.slider("DC min dSNR (dB)", 0.0, 10.0, 2.0, 0.5)
             TTT_MS = st.slider("Time-To-Trigger (ms)", 200, 3000, def_TTT, 100)
             HO_GAP_MS = st.slider("HO outage (ms)", 0, 1500, def_HO, 50)
-
-        st.markdown("<div class='sec-hdr'>Safety</div>", unsafe_allow_html=True)
-        tsr_conf = st.slider("Buckling threshold", 0.60, 0.95, 0.85, 0.01, key="tsr_conf")
-        tsr_speed = st.slider("TSR speed (km/h)", 30, 120, 60, 5)
-        stop_on_crit = st.checkbox("STOP at conf >= 0.92", key="stop_on_crit")
-
-        with st.expander("Synthetic scenario controls", expanded=False):
+            st.markdown("<div class='sec-hdr'>Synthetic Fallback</div>", unsafe_allow_html=True)
             demo_issues = st.checkbox("Inject summer hotspots", True)
             summer_sev = st.slider("Severity boost (C)", 0.0, 20.0, 12.0, 1.0)
             always_tsr = st.checkbox("Always show TSR zones", True)
 
         st.markdown("---")
-        if st.button("Jump to Thermal Event", width="stretch"):
-            st.session_state.t_idx = DEMO_EVENT_TICK
-            st.session_state.train_v_ms = 0.0
-            st.session_state.playing = False
-        if st.button("✅ Enable Simulation", width="stretch"):
+        st.markdown("<div class='sec-hdr'>Playback</div>", unsafe_allow_html=True)
+        if st.button("Enable Simulation", width="stretch"):
             st.session_state.playing = True
-        ca, cb, cc = st.columns(3)
-        if ca.button("◀◀", width="stretch"):
+        ca, cb = st.columns(2)
+        if ca.button("Step -10", width="stretch"):
             st.session_state.t_idx = max(0, st.session_state.t_idx - 10)
-        if cb.button("▶▶", width="stretch"):
+        if cb.button("Step +10", width="stretch"):
             st.session_state.t_idx = min(max(1, int(sim_minutes * 60) - 1), st.session_state.t_idx + 10)
-        play_rate = cc.selectbox("Rate", ["1×", "2×", "4×", "0.5×"], label_visibility="collapsed")
+        play_rate = st.selectbox("Playback rate", ["1×", "2×", "4×", "0.5×"])
         r1, r2 = st.columns(2)
-        if r1.button("▶ Play", width="stretch"):
+        if r1.button("Play", width="stretch"):
             st.session_state.playing = True
-        if r2.button("⏸ Pause", width="stretch"):
+        if r2.button("Pause", width="stretch"):
             st.session_state.playing = False
-        if st.button("⏹ Stop & Reset", width="stretch"):
+        if st.button("Reset", width="stretch"):
             st.session_state.playing = False
             reset_sim()
             st.rerun()
