@@ -154,6 +154,11 @@ div[data-testid="metric-container"] [data-testid="stMetricValue"]{{color:{PAL['c
 .receiver-summary-row small{{display:block;font-family:'IBM Plex Mono',monospace;font-size:10px;color:{PAL['muted']};text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}}
 .receiver-summary-row strong{{font-size:13px;line-height:1.34;color:{PAL['text']};font-weight:600}}
 @media (max-width:900px){{.evidence-hero{{grid-template-columns:1fr}}.evidence-kpis{{grid-template-columns:1fr}}}}
+.thermal-note{{font-size:13px;line-height:1.45;color:{PAL['muted']};background:rgba(57,208,216,.08);border:1px solid rgba(57,208,216,.22);border-radius:10px;padding:10px 12px;margin:6px 0 12px}}
+.thermal-summary{{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}}
+.thermal-summary div{{background:{PAL['surface']};border:1px solid {PAL['border']};border-radius:10px;padding:10px}}
+.thermal-summary span{{display:block;font-family:'IBM Plex Mono',monospace;font-size:10px;color:{PAL['muted']};text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}}
+.thermal-summary b{{font-family:'IBM Plex Mono',monospace;font-size:14px;color:{PAL['text']};word-break:break-word}}
 .transfer-card{{position:relative;overflow:hidden;background:radial-gradient(circle at top right,color-mix(in srgb,var(--mode-color) 24%,transparent),transparent 38%),linear-gradient(150deg,rgba(22,27,34,.98),rgba(13,17,23,.94));border:1px solid {PAL['border']};border-radius:16px;padding:16px;min-height:260px;box-shadow:0 16px 40px rgba(0,0,0,.26)}}
 .transfer-card:before{{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:linear-gradient(90deg,var(--mode-color),transparent)}}
 .transfer-active{{border-color:var(--mode-color);box-shadow:0 18px 48px color-mix(in srgb,var(--mode-color) 18%,transparent)}}

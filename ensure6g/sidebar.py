@@ -19,6 +19,11 @@ PRESET_VALUES = {
 }
 
 
+def _set_timeline_idx(idx):
+    st.session_state.t_idx = int(idx)
+    st.session_state.timeline_nonce = st.session_state.get("timeline_nonce", 0) + 1
+
+
 def apply_demo_preset(name):
     preset = PRESET_VALUES[name]
     thermal_source = resolve_thermal_source(preset["thermal_source"])
@@ -28,7 +33,19 @@ def apply_demo_preset(name):
     st.session_state.thermal_source = thermal_source
     st.session_state.tsr_conf = preset["tsr_conf"]
     st.session_state.stop_on_crit = preset["stop_on_crit"]
-    st.session_state.t_idx = DEMO_EVENT_TICK
+    _set_timeline_idx(DEMO_EVENT_TICK)
+    st.session_state.train_v_ms = 0.0
+    st.session_state.playing = False
+
+
+def jump_to_event_frame():
+    _set_timeline_idx(DEMO_EVENT_TICK)
+    st.session_state.train_v_ms = 0.0
+    st.session_state.playing = False
+
+
+def step_timeline(delta, max_idx):
+    _set_timeline_idx(min(max_idx, max(0, st.session_state.t_idx + delta)))
     st.session_state.train_v_ms = 0.0
     st.session_state.playing = False
 
@@ -54,11 +71,13 @@ def reset_sim():
         ("ho_gap_until", -1),
     ]:
         st.session_state[k] = v
+    st.session_state.timeline_nonce = st.session_state.get("timeline_nonce", 0) + 1
 
 
 def init_session_state():
     for k, v in [
         ("t_idx", 0),
+        ("timeline_nonce", 0),
         ("playing", False),
         ("train_s_m", 0.0),
         ("train_v_ms", 0.0),
@@ -123,17 +142,11 @@ def render_sidebar():
         )
 
         st.markdown("<div class='sec-hdr'>Story Chapters</div>", unsafe_allow_html=True)
-        if st.button("1 Baseline - RAW Image/Data", width="stretch"):
-            apply_demo_preset("Baseline")
-        if st.button("2 Stress - RAW Under Load", width="stretch"):
-            apply_demo_preset("Network Stress")
-        if st.button("3 Semantic Safety - Meaning + Action", width="stretch"):
-            apply_demo_preset("Semantic Safety")
+        st.button("1 Baseline - RAW Image/Data", width="stretch", on_click=apply_demo_preset, args=("Baseline",))
+        st.button("2 Stress - RAW Under Load", width="stretch", on_click=apply_demo_preset, args=("Network Stress",))
+        st.button("3 Semantic Safety - Meaning + Action", width="stretch", on_click=apply_demo_preset, args=("Semantic Safety",))
 
-        if st.button("Go to Event Frame 330", width="stretch"):
-            st.session_state.t_idx = DEMO_EVENT_TICK
-            st.session_state.train_v_ms = 0.0
-            st.session_state.playing = False
+        st.button("Go to Event Frame 330", width="stretch", on_click=jump_to_event_frame)
         st.markdown(
             "<div class='sidebar-hint'>Frame 330: high thermal risk semantic event used for the scripted TMS action.</div>",
             unsafe_allow_html=True,
@@ -193,10 +206,9 @@ def render_sidebar():
         if st.button("Enable Simulation", width="stretch"):
             st.session_state.playing = True
         ca, cb = st.columns(2)
-        if ca.button("Step -10", width="stretch"):
-            st.session_state.t_idx = max(0, st.session_state.t_idx - 10)
-        if cb.button("Step +10", width="stretch"):
-            st.session_state.t_idx = min(max(1, int(sim_minutes * 60) - 1), st.session_state.t_idx + 10)
+        max_idx = max(1, int(sim_minutes * 60) - 1)
+        ca.button("Step -10", width="stretch", on_click=step_timeline, args=(-10, max_idx))
+        cb.button("Step +10", width="stretch", on_click=step_timeline, args=(10, max_idx))
         play_rate = st.selectbox("Playback rate", ["1×", "2×", "4×", "0.5×"])
         r1, r2 = st.columns(2)
         if r1.button("Play", width="stretch"):

@@ -506,41 +506,76 @@ def _render_thermal_tab(frame):
         st.markdown("<div class='s-warn'>Collected thermal data is not available.</div>", unsafe_allow_html=True)
         return
 
+    event = thermal.get("semantic_event", {})
+    preview_path = thermal.get("preview_path")
+    risk_cls = {"low": "risk-low", "medium": "risk-medium", "high": "risk-high"}.get(thermal["risk_label"], "risk-low")
     left, right = st.columns([2, 1], gap="medium")
     with left:
-        st.markdown("<div class='sec-hdr'>P2 Pro Thermal Frame</div>", unsafe_allow_html=True)
+        st.markdown("<div class='sec-hdr'>Human View - Railway Thermal Preview</div>", unsafe_allow_html=True)
+        st.markdown(
+            "<div class='thermal-note'>This preview is for the audience and operator: it shows rails, sleepers, and ballast. The raw `.npy` matrix below is what the semantic extraction uses.</div>",
+            unsafe_allow_html=True,
+        )
+        if preview_path:
+            st.image(preview_path, caption=f"P2 Pro railway thermal preview | frame {thermal['frame_id']}", use_container_width=True)
+        else:
+            st.markdown("<div class='s-warn'>Preview PNG is not available for this frame. Showing generated thermal matrix instead.</div>", unsafe_allow_html=True)
+
         temp_c = thermal_frame_celsius(thermal["frame_path"])
-        fig = go.Figure(
-            go.Heatmap(
-                z=temp_c,
-                colorscale=[
-                    [0, "#0D1117"],
-                    [0.35, "#1F6FEB"],
-                    [0.65, "#F0A500"],
-                    [1, "#E05A5A"],
-                ],
-                colorbar=dict(title="C"),
+        with st.expander("Raw algorithm view - temperature matrix", expanded=not bool(preview_path)):
+            fig = go.Figure(
+                go.Heatmap(
+                    z=temp_c,
+                    colorscale=[
+                        [0, "#0D1117"],
+                        [0.35, "#1F6FEB"],
+                        [0.65, "#F0A500"],
+                        [1, "#E05A5A"],
+                    ],
+                    colorbar=dict(title="C"),
+                )
             )
-        )
-        fig.add_scatter(
-            x=[thermal["hotspot_x"]],
-            y=[thermal["hotspot_y"]],
-            mode="markers",
-            marker=dict(size=10, color="#E6EDF3", symbol="x"),
-            name="Hotspot",
-        )
-        heatmap_layout = {**CHART_LAYOUT, "yaxis": {**CHART_LAYOUT.get("yaxis", {}), "autorange": "reversed"}}
-        fig.update_layout(height=440, **heatmap_layout)
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+            fig.add_scatter(
+                x=[thermal["hotspot_x"]],
+                y=[thermal["hotspot_y"]],
+                mode="markers",
+                marker=dict(size=10, color="#E6EDF3", symbol="x"),
+                name="Hotspot",
+            )
+            heatmap_layout = {**CHART_LAYOUT, "yaxis": {**CHART_LAYOUT.get("yaxis", {}), "autorange": "reversed"}}
+            fig.update_layout(height=360, **heatmap_layout)
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
     with right:
-        st.markdown("<div class='sec-hdr'>Frame Stats</div>", unsafe_allow_html=True)
+        st.markdown("<div class='sec-hdr'>Semantic Extraction</div>", unsafe_allow_html=True)
+        st.markdown(
+            f"""
+<div class="thermal-summary">
+  <div><span>Frame</span><b>{thermal['frame_id']}</b></div>
+  <div><span>Shape</span><b>{thermal['shape'][0]} x {thermal['shape'][1]}</b></div>
+  <div><span>Payload</span><b>{_fmt_bytes(thermal['payload_bytes'])}</b></div>
+  <div><span>Risk</span><b class="{risk_cls}">{thermal['risk_label'].upper()}</b></div>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
         st.metric("Frame", thermal["frame_id"])
         st.metric("Mean", f"{thermal['mean_temp_c']:.1f} C")
         st.metric("P95", f"{thermal['p95_temp_c']:.1f} C")
         st.metric("P99", f"{thermal['p99_temp_c']:.1f} C")
         st.metric("Delta", f"{thermal['delta_temp_c']:.1f} C")
-        st.metric("Risk", thermal["risk_label"].upper())
+        st.markdown("<div class='sec-hdr'>Extracted Event</div>", unsafe_allow_html=True)
+        st.markdown(
+            f"""
+<div class="semantic-packet">
+  <div><span>Sensor</span><b>{event.get('sensor_id', 'thermal-camera')}</b></div>
+  <div><span>Confidence</span><b>{event.get('confidence', 0):.2f}</b></div>
+  <div><span>Action</span><b>{event.get('recommended_action', 'monitor')}</b></div>
+  <div><span>Hotspot</span><b>{thermal['hotspot_x']}, {thermal['hotspot_y']}</b></div>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
 
 
 def _render_semantic_tab(frame):
@@ -789,9 +824,16 @@ def render_header_and_timeline(frame, secs, route_df=None):
     _render_thermal_panel(frame.get("thermal"))
 
     if st.session_state.playing:
-        st.slider("t", 0, secs - 1, frame["t"], disabled=True, label_visibility="collapsed")
+        st.slider("t", 0, secs - 1, frame["t"], disabled=True, label_visibility="collapsed", key=f"timeline_play_{frame['t']}")
     else:
-        new_t = st.slider("t", 0, secs - 1, frame["t"], label_visibility="collapsed")
+        new_t = st.slider(
+            "t",
+            0,
+            secs - 1,
+            frame["t"],
+            label_visibility="collapsed",
+            key=f"timeline_manual_{st.session_state.get('timeline_nonce', 0)}",
+        )
         if new_t != frame["t"]:
             st.session_state.t_idx = new_t
             if route_df is not None:
