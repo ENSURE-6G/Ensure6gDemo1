@@ -8,6 +8,7 @@ import streamlit as st
 
 THERMAL_ROOT = Path(__file__).resolve().parents[2] / "ThermalData"
 P2PRO_DIR = THERMAL_ROOT / "p2pro"
+P2PRO_PIC_DIR = THERMAL_ROOT / "p2proPic"
 P2PRO_SOURCE = "Collected P2 Pro"
 SYNTHETIC_SOURCE = "Synthetic"
 SEMANTIC_BYTES_FALLBACK = 0
@@ -39,6 +40,13 @@ def resolve_thermal_source(source, root_dir=None):
     return source
 
 
+def p2pro_preview_path(frame_path, preview_dir=None):
+    path = Path(frame_path)
+    pic_dir = Path(preview_dir) if preview_dir else path.parent.parent / "p2proPic"
+    preview = pic_dir / f"{path.stem}.png"
+    return str(preview) if preview.exists() else None
+
+
 @st.cache_data(show_spinner=False)
 def thermal_frame_stats(frame_path):
     path = Path(frame_path)
@@ -55,6 +63,7 @@ def thermal_frame_stats(frame_path):
         "available": True,
         "source": P2PRO_SOURCE,
         "frame_path": str(path),
+        "preview_path": p2pro_preview_path(path),
         "frame_id": _frame_number(path),
         "frame_name": path.name,
         "shape": tuple(int(v) for v in temp_c.shape),

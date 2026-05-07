@@ -1,3 +1,4 @@
+import json
 import math
 
 import numpy as np
@@ -78,6 +79,257 @@ def _mode_rows(thermal):
     ]
 
 
+def _thermal_preview_figure(temp_c, hotspot=None, downsample=1, title=None):
+    z = temp_c[::downsample, ::downsample]
+    fig = go.Figure(
+        go.Heatmap(
+            z=z,
+            colorscale=[
+                [0, "#0D1117"],
+                [0.35, "#1F6FEB"],
+                [0.65, "#F0A500"],
+                [1, "#E05A5A"],
+            ],
+            showscale=False,
+        )
+    )
+    if hotspot:
+        fig.add_scatter(
+            x=[hotspot[0] / downsample],
+            y=[hotspot[1] / downsample],
+            mode="markers",
+            marker=dict(size=9, color="#E6EDF3", symbol="x"),
+            showlegend=False,
+        )
+    heatmap_layout = {**CHART_LAYOUT, "yaxis": {**CHART_LAYOUT.get("yaxis", {}), "autorange": "reversed"}}
+    fig.update_layout(height=210, title=dict(text=title or "", font=dict(size=11)), **heatmap_layout)
+    return fig
+
+
+def _render_transfer_payload_examples(thermal):
+    event = thermal.get("semantic_event", {})
+    temp_c = thermal_frame_celsius(thermal["frame_path"])
+    hotspot = (thermal["hotspot_x"], thermal["hotspot_y"])
+    preview_path = thermal.get("preview_path")
+    raw_shape = " x ".join(str(v) for v in thermal["shape"])
+    semantic_json = json.dumps(event, indent=2)
+    hybrid_json = json.dumps(
+        {
+            "preview": "32 x 24 thermal thumbnail",
+            "frame_id": event.get("frame_id"),
+            "hotspot": [thermal["hotspot_x"], thermal["hotspot_y"]],
+            "risk_label": event.get("risk_label"),
+            "confidence": event.get("confidence"),
+            "recommended_action": event.get("recommended_action"),
+        },
+        indent=2,
+    )
+
+    st.markdown("<div class='sec-hdr'>What Gets Transferred</div>", unsafe_allow_html=True)
+    raw_col, hybrid_col, semantic_col = st.columns(3, gap="medium")
+
+    with raw_col:
+        st.markdown(
+            f"""
+<div class="packet-head raw">
+  <span>RAW transfer</span>
+  <b>{_fmt_bytes(thermal['payload_bytes'])}</b>
+</div>
+<div class="packet-hint">Full railway thermal image plus raw temperature matrix. Best visual detail, but every pixel/sample must cross the network.</div>
+""",
+            unsafe_allow_html=True,
+        )
+        if preview_path:
+            st.image(preview_path, caption=f"Railway thermal preview | frame {thermal['frame_id']}", use_container_width=True)
+            with st.expander("Show raw temperature matrix", expanded=False):
+                st.plotly_chart(
+                    _thermal_preview_figure(temp_c, hotspot=hotspot, downsample=1, title=f"Raw thermal matrix | {raw_shape} samples"),
+                    use_container_width=True,
+                    config={"displayModeBar": False},
+                )
+        else:
+            st.plotly_chart(
+                _thermal_preview_figure(temp_c, hotspot=hotspot, downsample=1, title=f"Raw thermal matrix | {raw_shape} samples"),
+                use_container_width=True,
+                config={"displayModeBar": False},
+            )
+        st.markdown(
+            """
+<div class="packet-lines">
+  <div><b>Contains</b> railway preview + full temperature matrix</div>
+  <div><b>Good for</b> human inspection, replay, and offline analysis</div>
+  <div><b>Risk</b> high bandwidth, higher drop chance under stress</div>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+
+    with hybrid_col:
+        st.markdown(
+            f"""
+<div class="packet-head hybrid">
+  <span>HYBRID transfer</span>
+  <b>{_fmt_bytes(thermal['hybrid_payload_bytes'])}</b>
+</div>
+<div class="packet-hint">Compressed railway preview plus event metadata. Operator keeps context without sending the full raw matrix.</div>
+""",
+            unsafe_allow_html=True,
+        )
+        if preview_path:
+            st.image(preview_path, caption="Hybrid preview image + semantic metadata", use_container_width=True)
+        else:
+            st.plotly_chart(
+                _thermal_preview_figure(temp_c, hotspot=hotspot, downsample=8, title="Thumbnail + hotspot context"),
+                use_container_width=True,
+                config={"displayModeBar": False},
+            )
+        st.code(hybrid_json, language="json")
+
+    with semantic_col:
+        risk = event.get("risk_label", "low").upper()
+        confidence = event.get("confidence", 0)
+        action = event.get("recommended_action", "monitor")
+        st.markdown(
+            f"""
+<div class="packet-head semantic">
+  <span>SEMANTIC transfer</span>
+  <b>{_fmt_bytes(thermal['semantic_payload_bytes'])}</b>
+</div>
+<div class="packet-hint">Meaning-only safety packet. The network carries the decision-relevant facts, not the image.</div>
+<div class="semantic-packet">
+  <div><span>Risk</span><b>{risk}</b></div>
+  <div><span>Confidence</span><b>{confidence:.2f}</b></div>
+  <div><span>Action</span><b>{action}</b></div>
+  <div><span>Frame</span><b>{event.get('frame_id')}</b></div>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+        st.code(semantic_json, language="json")
+
+
+def _mode_row(rows, mode):
+    for row in rows:
+        if row.get("mode") == mode:
+            return row
+    return {"mode": mode, "delivered": False, "tms_action": False, "delivery_loss": 1.0}
+
+
+def _receiver_status_html(mode, row, decision):
+    delivered = bool(row.get("delivered"))
+    status_cls = "ok" if delivered else "bad"
+    status = "RECEIVED" if delivered else "MISSING"
+    return f"""
+<div class="receiver-status {status_cls}">
+  <span>{mode} receiver status</span>
+  <b>{status}</b>
+</div>
+<div class="receiver-decision">{decision}</div>
+"""
+
+
+def _render_receiver_view(thermal, rows):
+    event = thermal.get("semantic_event", {})
+    preview_path = thermal.get("preview_path")
+    semantic_json = json.dumps(event, indent=2)
+    hybrid_json = json.dumps(
+        {
+            "preview": "railway thermal thumbnail",
+            "frame_id": event.get("frame_id"),
+            "risk_label": event.get("risk_label"),
+            "confidence": event.get("confidence"),
+            "recommended_action": event.get("recommended_action"),
+        },
+        indent=2,
+    )
+
+    st.markdown("<div class='sec-hdr'>Receiver / TMS View</div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div class='receiver-intro'>Same sensor event, three transmission modes. This shows what the TMS actually receives and what it can decide.</div>",
+        unsafe_allow_html=True,
+    )
+    raw_col, hybrid_col, semantic_col = st.columns(3, gap="medium")
+
+    raw_row = _mode_row(rows, "RAW")
+    with raw_col:
+        st.markdown("<div class='receiver-card raw'><div class='receiver-mode'>RAW</div>", unsafe_allow_html=True)
+        st.markdown("<div class='receiver-step'>1. Sent from sensor</div>", unsafe_allow_html=True)
+        st.markdown("<div class='receiver-copy'>Full railway thermal frame + raw temperature matrix.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='receiver-step'>2. Received by TMS</div>", unsafe_allow_html=True)
+        if raw_row.get("delivered") and preview_path:
+            st.image(preview_path, caption="Full railway thermal image received", use_container_width=True)
+        elif raw_row.get("delivered"):
+            st.markdown("<div class='receiver-placeholder ok'>RAW matrix received, visual preview unavailable.</div>", unsafe_allow_html=True)
+        else:
+            st.markdown("<div class='receiver-placeholder bad'>Image missing or corrupted under network stress.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='receiver-step'>3. TMS decision</div>", unsafe_allow_html=True)
+        st.markdown(
+            _receiver_status_html(
+                "RAW",
+                raw_row,
+                "TMS needs image processing before action. If the full frame drops, the safety action can be delayed or missed.",
+            ),
+            unsafe_allow_html=True,
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    hybrid_row = _mode_row(rows, "HYBRID")
+    with hybrid_col:
+        st.markdown("<div class='receiver-card hybrid'><div class='receiver-mode'>HYBRID</div>", unsafe_allow_html=True)
+        st.markdown("<div class='receiver-step'>1. Sent from sensor</div>", unsafe_allow_html=True)
+        st.markdown("<div class='receiver-copy'>Compressed railway preview + compact event metadata.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='receiver-step'>2. Received by TMS</div>", unsafe_allow_html=True)
+        if hybrid_row.get("delivered") and preview_path:
+            st.image(preview_path, caption="Preview received with metadata", use_container_width=True)
+            st.code(hybrid_json, language="json")
+        elif hybrid_row.get("delivered"):
+            st.code(hybrid_json, language="json")
+        else:
+            st.markdown("<div class='receiver-placeholder bad'>Preview and metadata are partial or missing.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='receiver-step'>3. TMS decision</div>", unsafe_allow_html=True)
+        st.markdown(
+            _receiver_status_html(
+                "HYBRID",
+                hybrid_row,
+                "TMS can inspect the preview and use event metadata. This is faster than processing the full raw matrix.",
+            ),
+            unsafe_allow_html=True,
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    semantic_row = _mode_row(rows, "SEMANTIC")
+    with semantic_col:
+        st.markdown("<div class='receiver-card semantic'><div class='receiver-mode'>SEMANTIC</div>", unsafe_allow_html=True)
+        st.markdown("<div class='receiver-step'>1. Sent from sensor</div>", unsafe_allow_html=True)
+        st.markdown("<div class='receiver-copy'>Meaning-only packet: risk, confidence, frame, and recommended action.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='receiver-step'>2. Received by TMS</div>", unsafe_allow_html=True)
+        if semantic_row.get("delivered"):
+            st.markdown(
+                f"""
+<div class="semantic-packet">
+  <div><span>Risk</span><b>{event.get('risk_label', 'low').upper()}</b></div>
+  <div><span>Confidence</span><b>{event.get('confidence', 0):.2f}</b></div>
+  <div><span>Action</span><b>{event.get('recommended_action', 'monitor')}</b></div>
+  <div><span>Frame</span><b>{event.get('frame_id')}</b></div>
+</div>
+""",
+                unsafe_allow_html=True,
+            )
+            st.code(semantic_json, language="json")
+        else:
+            st.markdown("<div class='receiver-placeholder bad'>Semantic packet missing.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='receiver-step'>3. TMS decision</div>", unsafe_allow_html=True)
+        st.markdown(
+            _receiver_status_html(
+                "SEMANTIC",
+                semantic_row,
+                "TMS directly triggers the recommended action when confidence and risk pass the safety threshold.",
+            ),
+            unsafe_allow_html=True,
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+
+
 def _render_transfer_comparison(frame):
     thermal = frame.get("thermal", {})
     if not thermal.get("available"):
@@ -133,6 +385,9 @@ def _render_transfer_comparison(frame):
 """,
                 unsafe_allow_html=True,
             )
+
+    _render_transfer_payload_examples(thermal)
+    _render_receiver_view(thermal, rows)
 
     chart_df = pd.DataFrame(rows)
     if not chart_df.empty:

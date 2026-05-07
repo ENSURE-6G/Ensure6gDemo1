@@ -10,6 +10,7 @@ from ensure6g.thermal_data import (
     SYNTHETIC_SOURCE,
     current_thermal_stats,
     list_p2pro_frames,
+    p2pro_preview_path,
     recommended_action,
     resolve_thermal_source,
     risk_label,
@@ -50,6 +51,20 @@ class ThermalDataTests(unittest.TestCase):
         self.assertEqual(stats["payload_bytes"], 16)
         self.assertAlmostEqual(stats["max_temp_c"], 40.0, places=1)
         self.assertEqual((stats["hotspot_x"], stats["hotspot_y"]), (1, 1))
+
+    def test_p2pro_preview_path_maps_matching_png(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            frame_dir = root / "p2pro"
+            preview_dir = root / "p2proPic"
+            frame_dir.mkdir()
+            preview_dir.mkdir()
+            frame_path = frame_dir / "p2img00330.npy"
+            preview_path = preview_dir / "p2img00330.png"
+            _write_p2pro_frame(frame_path, np.full((2, 2), 25.0))
+            preview_path.write_bytes(b"png")
+
+            self.assertEqual(p2pro_preview_path(frame_path), str(preview_path))
 
     def test_semantic_high_risk_event_recommends_tsr(self):
         stats = {

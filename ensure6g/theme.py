@@ -106,6 +106,43 @@ div[data-testid="metric-container"] [data-testid="stMetricValue"]{{color:{PAL['c
 .transfer-outcome{{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;letter-spacing:.08em;border-radius:8px;padding:8px 10px;text-align:center;margin-top:12px}}
 .transfer-outcome.ok{{background:rgba(61,214,140,.13);border:1px solid rgba(61,214,140,.38);color:{PAL['green']}}}
 .transfer-outcome.bad{{background:rgba(224,90,90,.14);border:1px solid rgba(224,90,90,.42);color:{PAL['red']}}}
+.packet-head{{display:flex;align-items:center;justify-content:space-between;gap:12px;border-radius:12px;padding:12px 14px;margin:8px 0;background:linear-gradient(135deg,rgba(22,27,34,.96),rgba(13,17,23,.86));border:1px solid {PAL['border']}}}
+.packet-head span{{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}}
+.packet-head b{{font-family:'IBM Plex Mono',monospace;font-size:17px;color:{PAL['text']}}}
+.packet-head.raw{{border-color:rgba(88,166,255,.55);box-shadow:inset 3px 0 0 #58A6FF}}
+.packet-head.raw span{{color:#58A6FF}}
+.packet-head.hybrid{{border-color:rgba(61,214,140,.55);box-shadow:inset 3px 0 0 #3DD68C}}
+.packet-head.hybrid span{{color:#3DD68C}}
+.packet-head.semantic{{border-color:rgba(179,136,255,.58);box-shadow:inset 3px 0 0 #B388FF}}
+.packet-head.semantic span{{color:#B388FF}}
+.packet-hint{{font-size:13px;line-height:1.42;color:{PAL['muted']};min-height:56px;margin:4px 0 10px}}
+.packet-lines{{display:grid;gap:6px;background:rgba(22,27,34,.72);border:1px solid {PAL['border']};border-radius:10px;padding:10px 12px;margin-top:8px}}
+.packet-lines div{{font-size:12px;color:{PAL['text']};line-height:1.35}}
+.packet-lines b{{font-family:'IBM Plex Mono',monospace;font-size:10px;color:{PAL['muted']};text-transform:uppercase;letter-spacing:.06em;margin-right:6px}}
+.semantic-packet{{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0 10px}}
+.semantic-packet div{{background:rgba(179,136,255,.10);border:1px solid rgba(179,136,255,.26);border-radius:10px;padding:10px}}
+.semantic-packet span{{display:block;font-family:'IBM Plex Mono',monospace;font-size:10px;color:{PAL['muted']};text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}}
+.semantic-packet b{{font-family:'IBM Plex Mono',monospace;font-size:14px;color:{PAL['purple']};word-break:break-word}}
+.receiver-intro{{font-size:13px;color:{PAL['muted']};margin:4px 0 10px}}
+.receiver-card{{background:linear-gradient(150deg,rgba(22,27,34,.98),rgba(13,17,23,.92));border:1px solid {PAL['border']};border-radius:16px;padding:14px;margin-bottom:14px;min-height:420px;box-shadow:0 16px 38px rgba(0,0,0,.22)}}
+.receiver-card.raw{{border-top:3px solid #58A6FF}}
+.receiver-card.hybrid{{border-top:3px solid #3DD68C}}
+.receiver-card.semantic{{border-top:3px solid #B388FF}}
+.receiver-mode{{font-family:'IBM Plex Mono',monospace;font-size:17px;font-weight:700;letter-spacing:.1em;margin-bottom:10px}}
+.receiver-card.raw .receiver-mode{{color:#58A6FF}}
+.receiver-card.hybrid .receiver-mode{{color:#3DD68C}}
+.receiver-card.semantic .receiver-mode{{color:#B388FF}}
+.receiver-step{{font-family:'IBM Plex Mono',monospace;font-size:10px;color:{PAL['muted']};text-transform:uppercase;letter-spacing:.1em;margin:12px 0 6px;border-bottom:1px solid {PAL['border']};padding-bottom:4px}}
+.receiver-copy{{font-size:13px;color:{PAL['text']};line-height:1.4;margin-bottom:8px}}
+.receiver-placeholder{{border-radius:12px;padding:28px 14px;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.05em;min-height:120px;display:flex;align-items:center;justify-content:center}}
+.receiver-placeholder.ok{{background:rgba(61,214,140,.10);border:1px dashed rgba(61,214,140,.45);color:{PAL['green']}}}
+.receiver-placeholder.bad{{background:repeating-linear-gradient(135deg,rgba(224,90,90,.14),rgba(224,90,90,.14) 10px,rgba(22,27,34,.75) 10px,rgba(22,27,34,.75) 20px);border:1px dashed rgba(224,90,90,.55);color:{PAL['red']}}}
+.receiver-status{{display:flex;align-items:center;justify-content:space-between;gap:8px;border-radius:10px;padding:9px 11px;margin:8px 0}}
+.receiver-status span{{font-family:'IBM Plex Mono',monospace;font-size:10px;color:{PAL['muted']};text-transform:uppercase;letter-spacing:.08em}}
+.receiver-status b{{font-family:'IBM Plex Mono',monospace;font-size:13px}}
+.receiver-status.ok{{background:rgba(61,214,140,.11);border:1px solid rgba(61,214,140,.35);color:{PAL['green']}}}
+.receiver-status.bad{{background:rgba(224,90,90,.13);border:1px solid rgba(224,90,90,.42);color:{PAL['red']}}}
+.receiver-decision{{font-size:12px;line-height:1.42;color:{PAL['text']};background:rgba(22,27,34,.7);border:1px solid {PAL['border']};border-radius:10px;padding:10px 12px}}
 .prog-wrap{{background:{PAL['border']};border-radius:4px;height:6px;margin:4px 0 12px;overflow:hidden}}
 .prog-fill{{height:6px;border-radius:4px;background:linear-gradient(90deg,{PAL['cyan']},{PAL['blue']});transition:width .4s}}
 #MainMenu,footer{{visibility:hidden}}
