@@ -57,6 +57,122 @@ def _payload_rows(thermal):
     )
 
 
+def _fmt_bytes(num_bytes):
+    if num_bytes >= 1024 * 1024:
+        return f"{num_bytes / (1024 * 1024):.1f} MB"
+    if num_bytes >= 1024:
+        return f"{num_bytes / 1024:.1f} KB"
+    return f"{num_bytes:,} B"
+
+
+def _mode_rows(thermal):
+    rows = thermal.get("mode_comparison", [])
+    if rows:
+        return rows
+    if not thermal.get("available"):
+        return []
+    return [
+        {"mode": "RAW", "description": "Full P2 Pro thermal frame", "payload_bytes": thermal["payload_bytes"]},
+        {"mode": "HYBRID", "description": "Preview-scale context plus event", "payload_bytes": thermal["hybrid_payload_bytes"]},
+        {"mode": "SEMANTIC", "description": "Event meaning only", "payload_bytes": thermal["semantic_payload_bytes"]},
+    ]
+
+
+def _render_transfer_comparison(frame):
+    thermal = frame.get("thermal", {})
+    if not thermal.get("available"):
+        st.markdown("<div class='s-warn'>Transfer comparison needs collected thermal data.</div>", unsafe_allow_html=True)
+        return
+
+    rows = _mode_rows(thermal)
+    active_mode = st.session_state.get("uplink_mode", "SEMANTIC")
+    palette = {"RAW": "#58A6FF", "HYBRID": "#3DD68C", "SEMANTIC": "#B388FF"}
+    labels = {
+        "RAW": "Maximum fidelity, maximum bandwidth pressure.",
+        "HYBRID": "Balanced: some visual context plus semantic meaning.",
+        "SEMANTIC": "Smallest payload, strongest safety path under network stress.",
+    }
+    raw_payload = max(int(thermal.get("payload_bytes", 1)), 1)
+
+    st.markdown("<div class='sec-hdr'>Thermal Data Transfer Modes</div>", unsafe_allow_html=True)
+    card_cols = st.columns(3, gap="medium")
+    for col, row in zip(card_cols, rows):
+        mode = row["mode"]
+        payload = int(row["payload_bytes"])
+        reduction = 100 * (1 - payload / raw_payload)
+        reliability = row.get("reliability_pct")
+        delivered = row.get("delivered")
+        action = row.get("tms_action")
+        active_cls = " transfer-active" if mode == active_mode else ""
+        outcome_cls = "ok" if delivered else "bad"
+        outcome = "TMS ACTION" if action else ("DELIVERED" if delivered else "DROPPED")
+        with col:
+            st.markdown(
+                f"""
+<div class="transfer-card{active_cls}" style="--mode-color:{palette[mode]}">
+  <div class="transfer-topline">
+    <span class="transfer-mode">{mode}</span>
+    <span class="transfer-pill">{'ACTIVE' if mode == active_mode else 'COMPARE'}</span>
+  </div>
+  <div class="transfer-payload">{_fmt_bytes(payload)}</div>
+  <div class="transfer-sub">{labels[mode]}</div>
+  <div class="transfer-bars">
+    <div>
+      <div class="transfer-label">Payload reduction vs RAW</div>
+      <div class="transfer-track"><div class="transfer-fill" style="width:{max(0, reduction):.1f}%"></div></div>
+      <div class="transfer-num">{reduction:.1f}%</div>
+    </div>
+    <div>
+      <div class="transfer-label">Estimated reliability</div>
+      <div class="transfer-track"><div class="transfer-fill" style="width:{max(0, min(100, reliability or 0)):.1f}%"></div></div>
+      <div class="transfer-num">{(reliability or 0):.0f}%</div>
+    </div>
+  </div>
+  <div class="transfer-outcome {outcome_cls}">{outcome}</div>
+</div>
+""",
+                unsafe_allow_html=True,
+            )
+
+    chart_df = pd.DataFrame(rows)
+    if not chart_df.empty:
+        chart_df["payload_kb"] = chart_df["payload_bytes"] / 1024
+        chart_df["reliability_pct"] = chart_df["reliability_pct"].fillna(0)
+        fig = go.Figure()
+        fig.add_bar(
+            x=chart_df["mode"],
+            y=chart_df["payload_kb"],
+            name="Payload (KB)",
+            marker_color=[palette[m] for m in chart_df["mode"]],
+            text=[_fmt_bytes(int(v)) for v in chart_df["payload_bytes"]],
+            textposition="outside",
+        )
+        fig.add_scatter(
+            x=chart_df["mode"],
+            y=chart_df["reliability_pct"],
+            name="Reliability (%)",
+            mode="lines+markers",
+            yaxis="y2",
+            line=dict(color="#F0A500", width=3),
+            marker=dict(size=10),
+        )
+        fig.update_layout(
+            height=320,
+            yaxis=dict(title="Payload KB", gridcolor="#21262D", linecolor="#30363D"),
+            yaxis2=dict(title="Reliability %", overlaying="y", side="right", range=[0, 105], gridcolor="#21262D"),
+            **{k: v for k, v in CHART_LAYOUT.items() if k not in ("yaxis",)},
+        )
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+    summary_cols = st.columns(4)
+    event = thermal.get("semantic_event", {})
+    semantic_payload = max(int(thermal.get("semantic_payload_bytes", 1)), 1)
+    summary_cols[0].metric("RAW frame", _fmt_bytes(raw_payload))
+    summary_cols[1].metric("Semantic event", _fmt_bytes(semantic_payload))
+    summary_cols[2].metric("Compression", f"{raw_payload / semantic_payload:,.0f}x")
+    summary_cols[3].metric("Recommended action", event.get("recommended_action", "monitor"))
+
+
 def _render_thermal_tab(frame):
     thermal = frame.get("thermal", {})
     if not thermal.get("available"):
@@ -515,6 +631,8 @@ def render_tabs(frame, route_df, secs):
             mc2.metric("Alerts", str(len(st.session_state.alerts_feed)))
 
     with tab_flow:
+        _render_transfer_comparison(frame)
+
         st.markdown("<div class='sec-hdr'>Data Flow - Sensors -> BS -> TMS -> Train</div>", unsafe_allow_html=True)
         s_to_bs = max(1, frame["bps_total"])
         to_train = max(1, frame["laneA_bps"] + frame["laneB_bps"])

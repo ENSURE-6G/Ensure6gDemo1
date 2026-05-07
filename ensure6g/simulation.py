@@ -95,6 +95,40 @@ def _thermal_event_delivered(loss, mode, frame_id):
     return delivery_score > loss
 
 
+def _thermal_mode_comparison(thermal, base_loss, cap_bps):
+    if not thermal.get("available"):
+        return []
+
+    event = thermal.get("semantic_event", {})
+    risk = event.get("risk_label", "low")
+    rows = []
+    for mode, payload_key, description in [
+        ("RAW", "payload_bytes", "Full P2 Pro thermal frame"),
+        ("HYBRID", "hybrid_payload_bytes", "Preview-scale context plus event"),
+        ("SEMANTIC", "semantic_payload_bytes", "Event meaning only"),
+    ]:
+        payload = int(thermal.get(payload_key, 0))
+        delivery_loss = _thermal_delivery_loss(base_loss, mode)
+        delivered = risk == "low" or _thermal_event_delivered(delivery_loss, mode, thermal["frame_id"])
+        load_pct = 100 * payload / max(cap_bps, 1)
+        transfer_ms = 1000 * payload * 8 / max(cap_bps, 1)
+        rows.append(
+            {
+                "mode": mode,
+                "description": description,
+                "payload_bytes": payload,
+                "payload_kb": payload / 1024,
+                "delivery_loss": delivery_loss,
+                "reliability_pct": 100 * (1 - delivery_loss),
+                "delivered": delivered,
+                "load_pct": load_pct,
+                "transfer_ms": transfer_ms,
+                "tms_action": delivered and event.get("recommended_action") == "issue_tsr",
+            }
+        )
+    return rows
+
+
 def _apply_tsr_from_alert(alert, controls, t, real_keys):
     if alert["confidence"] < controls["tsr_conf"]:
         return
@@ -328,6 +362,7 @@ def compute_frame(route_df, seg_labels, secs, controls):
         thermal["delivery_loss"] = thermal_delivery_loss
         thermal["delivered_to_tms"] = thermal_event_delivered
         thermal["triggered_alert"] = thermal_alert is not None
+        thermal["mode_comparison"] = _thermal_mode_comparison(thermal, loss_down, cap_bps)
 
     laneA_bps = len(laneA_alerts) * BYTES_ALERT * (2 if (controls["enable_dc"] and secondary) else 1)
     laneB_bps = len(laneB_msgs) * BYTES_SUMM

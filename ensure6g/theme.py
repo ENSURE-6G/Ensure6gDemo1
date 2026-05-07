@@ -90,6 +90,22 @@ div[data-testid="metric-container"] [data-testid="stMetricValue"]{{color:{PAL['c
 .demo-copy b{{color:{PAL['muted']};font-family:'IBM Plex Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:.06em}}
 .demo-check-grid{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:8px}}
 @media (max-width:900px){{.demo-check-grid{{grid-template-columns:1fr}}}}
+.transfer-card{{position:relative;overflow:hidden;background:radial-gradient(circle at top right,color-mix(in srgb,var(--mode-color) 24%,transparent),transparent 38%),linear-gradient(150deg,rgba(22,27,34,.98),rgba(13,17,23,.94));border:1px solid {PAL['border']};border-radius:16px;padding:16px;min-height:260px;box-shadow:0 16px 40px rgba(0,0,0,.26)}}
+.transfer-card:before{{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:linear-gradient(90deg,var(--mode-color),transparent)}}
+.transfer-active{{border-color:var(--mode-color);box-shadow:0 18px 48px color-mix(in srgb,var(--mode-color) 18%,transparent)}}
+.transfer-topline{{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}}
+.transfer-mode{{font-family:'IBM Plex Mono',monospace;font-size:18px;font-weight:700;letter-spacing:.08em;color:var(--mode-color)}}
+.transfer-pill{{font-family:'IBM Plex Mono',monospace;font-size:10px;color:{PAL['bg']};background:var(--mode-color);border-radius:999px;padding:3px 8px;font-weight:700;letter-spacing:.06em}}
+.transfer-payload{{font-family:'IBM Plex Mono',monospace;font-size:31px;font-weight:700;color:{PAL['text']};line-height:1;margin-bottom:8px}}
+.transfer-sub{{font-size:13px;line-height:1.38;color:{PAL['muted']};min-height:38px;margin-bottom:14px}}
+.transfer-bars{{display:grid;gap:11px;margin:14px 0}}
+.transfer-label{{font-family:'IBM Plex Mono',monospace;font-size:10px;color:{PAL['muted']};text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px}}
+.transfer-track{{height:8px;background:#30363D;border-radius:999px;overflow:hidden}}
+.transfer-fill{{height:8px;background:linear-gradient(90deg,var(--mode-color),#E6EDF3);border-radius:999px}}
+.transfer-num{{font-family:'IBM Plex Mono',monospace;font-size:11px;color:{PAL['text']};margin-top:3px;text-align:right}}
+.transfer-outcome{{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;letter-spacing:.08em;border-radius:8px;padding:8px 10px;text-align:center;margin-top:12px}}
+.transfer-outcome.ok{{background:rgba(61,214,140,.13);border:1px solid rgba(61,214,140,.38);color:{PAL['green']}}}
+.transfer-outcome.bad{{background:rgba(224,90,90,.14);border:1px solid rgba(224,90,90,.42);color:{PAL['red']}}}
 .prog-wrap{{background:{PAL['border']};border-radius:4px;height:6px;margin:4px 0 12px;overflow:hidden}}
 .prog-fill{{height:6px;border-radius:4px;background:linear-gradient(90deg,{PAL['cyan']},{PAL['blue']});transition:width .4s}}
 #MainMenu,footer{{visibility:hidden}}
