@@ -154,13 +154,8 @@ def render_sidebar():
             unsafe_allow_html=True,
         )
 
-        st.markdown("<div class='sec-hdr'>Operator Controls</div>", unsafe_allow_html=True)
         scenario_options = ["Good signal", "Mixed", "Adverse"]
-        preset = st.selectbox(
-            "Network condition",
-            scenario_options,
-            key="scenario_preset",
-        )
+        preset = st.session_state.get("scenario_preset", "Good signal")
         if preset == "Good signal":
             def_min, def_TTT, def_HO, def_dc = 20, 1000, 200, True
         elif preset == "Mixed":
@@ -168,36 +163,58 @@ def render_sidebar():
         else:
             def_min, def_TTT, def_HO, def_dc = 20, 1600, 600, False
 
-        sim_minutes = st.number_input("Duration (min)", 5, 120, def_min, 5)
-        mode_options = ["RAW", "HYBRID", "SEMANTIC"]
-        mode = st.radio("Transfer mode", mode_options, key="uplink_mode", horizontal=True)
-
-        st.markdown("<div class='sec-hdr'>Thermal Input</div>", unsafe_allow_html=True)
+        sim_minutes = 20
+        mode = st.session_state.get("uplink_mode", "SEMANTIC")
         has_p2pro_data = p2pro_data_available()
         if not has_p2pro_data and st.session_state.get("thermal_source") == P2PRO_SOURCE:
             st.session_state.thermal_source = SYNTHETIC_SOURCE
-
         source_options = [P2PRO_SOURCE, SYNTHETIC_SOURCE] if has_p2pro_data else [SYNTHETIC_SOURCE]
-        thermal_source = st.selectbox("Source", source_options, key="thermal_source")
-        if not has_p2pro_data:
-            st.markdown(
-                f"<div class='s-warn'>Collected thermal data not found at {P2PRO_DIR}. "
-                "Using synthetic fallback.</div>",
-                unsafe_allow_html=True,
-            )
-        elif using_bundled_sample():
-            st.markdown(
-                f"<div class='sidebar-hint'>Full external dataset not found at {P2PRO_DIR}. "
-                f"Using bundled demo thermal sample from {BUNDLED_P2PRO_DIR}.</div>",
-                unsafe_allow_html=True,
-            )
+        thermal_source = st.session_state.get("thermal_source", source_options[0])
+        if thermal_source not in source_options:
+            thermal_source = source_options[0]
+            st.session_state.thermal_source = thermal_source
+        tsr_conf = st.session_state.get("tsr_conf", 0.85)
+        tsr_speed = 60
+        stop_on_crit = st.session_state.get("stop_on_crit", True)
 
-        st.markdown("<div class='sec-hdr'>Safety</div>", unsafe_allow_html=True)
-        tsr_conf = st.slider("Action threshold", 0.60, 0.95, 0.85, 0.01, key="tsr_conf")
-        tsr_speed = st.slider("TSR speed (km/h)", 30, 120, 60, 5)
-        stop_on_crit = st.checkbox("STOP at conf >= 0.92", key="stop_on_crit")
+        with st.expander("Advanced settings", expanded=False):
+            st.markdown("<div class='sec-hdr'>Scenario</div>", unsafe_allow_html=True)
+            preset = st.selectbox(
+                "Network condition",
+                scenario_options,
+                key="scenario_preset",
+            )
+            if preset == "Good signal":
+                def_min, def_TTT, def_HO, def_dc = 20, 1000, 200, True
+            elif preset == "Mixed":
+                def_min, def_TTT, def_HO, def_dc = 20, 1200, 350, True
+            else:
+                def_min, def_TTT, def_HO, def_dc = 20, 1600, 600, False
 
-        with st.expander("Advanced controls", expanded=False):
+            sim_minutes = st.number_input("Duration (min)", 5, 120, def_min, 5)
+            mode_options = ["RAW", "HYBRID", "SEMANTIC"]
+            mode = st.radio("Transfer mode", mode_options, key="uplink_mode", horizontal=True)
+
+            st.markdown("<div class='sec-hdr'>Thermal Input</div>", unsafe_allow_html=True)
+            thermal_source = st.selectbox("Source", source_options, key="thermal_source")
+            if not has_p2pro_data:
+                st.markdown(
+                    f"<div class='s-warn'>Collected thermal data not found at {P2PRO_DIR}. "
+                    "Using synthetic fallback.</div>",
+                    unsafe_allow_html=True,
+                )
+            elif using_bundled_sample():
+                st.markdown(
+                    f"<div class='sidebar-hint'>Full external dataset not found at {P2PRO_DIR}. "
+                    f"Using bundled demo thermal sample from {BUNDLED_P2PRO_DIR}.</div>",
+                    unsafe_allow_html=True,
+                )
+
+            st.markdown("<div class='sec-hdr'>Safety</div>", unsafe_allow_html=True)
+            tsr_conf = st.slider("Action threshold", 0.60, 0.95, 0.85, 0.01, key="tsr_conf")
+            tsr_speed = st.slider("TSR speed (km/h)", 30, 120, 60, 5)
+            stop_on_crit = st.checkbox("STOP at conf >= 0.92", key="stop_on_crit")
+
             st.markdown("<div class='sec-hdr'>Radio / PHY</div>", unsafe_allow_html=True)
             laneA_reps = st.slider("Lane-A repetitions", 1, 3, 2)
             enable_dc = st.checkbox("Dual Connectivity", def_dc)

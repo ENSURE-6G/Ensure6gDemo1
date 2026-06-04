@@ -613,6 +613,197 @@ def _render_semantic_tab(frame):
             st.markdown("<div class='s-crit'>Event dropped. TMS may miss this thermal condition.</div>", unsafe_allow_html=True)
 
 
+def _render_mission_tab(frame):
+    thermal = frame.get("thermal", {})
+    event = thermal.get("semantic_event", {}) if thermal.get("available") else {}
+    st.markdown(
+        """
+<div class="mission-hero">
+  <div>
+    <div class="guided-eyebrow">ENSURE-6G use case</div>
+    <div class="mission-title">Trustworthy semantic sensing for remote transport infrastructure</div>
+    <div class="mission-lede">The demo focuses on one critical-infrastructure story: remote railway sensing, semantic fusion at the edge, resilient 6G transfer, and a TMS decision that can reduce inspection burden and safety risk.</div>
+  </div>
+  <div class="mission-proof">
+    <span>Live proof point</span>
+    <b>Frame 330</b>
+    <small>thermal risk -> semantic event -> TMS action</small>
+  </div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+    cards = [
+        ("Remote infrastructure", "Connected thermal sensing monitors rail, road, logistics, and harsh transport corridors where continuous human inspection is difficult."),
+        ("Costly inspections", "Remote measurements and intelligent analysis reduce repeated field visits and help focus maintenance teams on real anomalies."),
+        ("Operational efficiency", "Semantic events improve situational awareness so transport operators can prioritize disruptions, risks, and response."),
+        ("Safety risks", "Earlier hazard detection gives the TMS a compact, actionable signal before the issue becomes an accident or service disruption."),
+    ]
+    cols = st.columns(4, gap="medium")
+    for idx, (title, copy) in enumerate(cards, start=1):
+        with cols[idx - 1]:
+            st.markdown(
+                f"""
+<div class="mission-card">
+  <div class="mission-num">0{idx}</div>
+  <div class="mission-card-title">{title}</div>
+  <div class="mission-card-copy">{copy}</div>
+</div>
+""",
+                unsafe_allow_html=True,
+            )
+
+    st.markdown("<div class='sec-hdr'>Simplified ENSURE-6G Pattern</div>", unsafe_allow_html=True)
+    pipeline = [
+        ("Infrastructure", "Remote railway corridor", "Large and harsh environment"),
+        ("Sensing", "Thermal frame + context", "Continuous remote observation"),
+        ("Semantic Fusion", "Risk, confidence, action", "Meaning instead of raw volume"),
+        ("6G Transfer", "RAW / HYBRID / SEMANTIC", "Resilience under network stress"),
+        ("TMS Decision", event.get("recommended_action", "issue_tsr"), "Decision support for safety response"),
+    ]
+    st.markdown(
+        "<div class='mission-pipeline'>"
+        + "".join(
+            f"""
+<div class="mission-stage">
+  <span>{name}</span>
+  <b>{value}</b>
+  <small>{hint}</small>
+</div>
+"""
+            for name, value, hint in pipeline
+        )
+        + "</div>",
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        """
+<div class="mission-note">
+  Railway is the demonstrator. The same pattern can extend to roads, logistics routes, ports, energy corridors, and other remote infrastructure where trusted 6G communication must carry the right meaning at the right time.
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+
+def _render_live_demo_tab(frame):
+    thermal = frame.get("thermal", {})
+    event = thermal.get("semantic_event", {}) if thermal.get("available") else {}
+    st.markdown(
+        f"""
+<div class="fusion-strip">
+  <div>
+    <span>1. Connected sensing</span>
+    <b>Railway thermal frame</b>
+    <small>Remote infrastructure condition</small>
+  </div>
+  <div>
+    <span>2. Edge semantic fusion</span>
+    <b>{event.get('risk_label', 'risk').upper()} / {event.get('confidence', 0):.2f}</b>
+    <small>Risk, confidence, location, action</small>
+  </div>
+  <div>
+    <span>3. Resilient 6G transfer</span>
+    <b>{st.session_state.get('uplink_mode', 'SEMANTIC')}</b>
+    <small>RAW, HYBRID, or SEMANTIC payload</small>
+  </div>
+  <div>
+    <span>4. TMS decision</span>
+    <b>{event.get('recommended_action', 'monitor')}</b>
+    <small>Operational safety response</small>
+  </div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+    _render_demo_tab(frame)
+
+
+def _render_tms_decision_tab(frame):
+    thermal = frame.get("thermal", {})
+    event = thermal.get("semantic_event", {}) if thermal.get("available") else {}
+    rows = _mode_rows(thermal) if thermal.get("available") else []
+    active_mode = st.session_state.get("uplink_mode", "SEMANTIC")
+    active_row = _mode_row(rows, active_mode)
+    delivered = bool(active_row.get("delivered") or thermal.get("delivered_to_tms"))
+    high_risk = event.get("risk_label") in ("high", "critical")
+    action = event.get("recommended_action", "monitor")
+    confidence = event.get("confidence", 0.0)
+    decision = "ISSUE TSR" if delivered and high_risk and action == "issue_tsr" else ("MONITOR" if not high_risk else "WAIT FOR TRUSTED EVENT")
+    status_cls = "ok" if decision == "ISSUE TSR" else ("bad" if high_risk and not delivered else "warn")
+
+    st.markdown(
+        f"""
+<div class="decision-hero {status_cls}">
+  <div>
+    <div class="guided-eyebrow">Trust & decision layer</div>
+    <div class="decision-title">TMS decision from trusted semantic meaning</div>
+    <div class="guided-lede">The receiver does not need every pixel to act. It needs a trustworthy event with enough confidence, delivery, and operational context.</div>
+  </div>
+  <div class="decision-verdict">
+    <span>Current decision</span>
+    <b>{decision}</b>
+    <small>mode={active_mode} | delivered={'YES' if delivered else 'NO'}</small>
+  </div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Risk", event.get("risk_label", "low").upper())
+    c2.metric("Confidence", f"{confidence:.2f}")
+    c3.metric("Recommended action", action)
+    c4.metric("Receiver status", "Trusted event" if delivered else "Missing/degraded")
+
+    st.markdown("<div class='sec-hdr'>Decision Inputs</div>", unsafe_allow_html=True)
+    cols = st.columns(3, gap="medium")
+    decision_inputs = [
+        ("Sensing evidence", f"Frame {thermal.get('frame_id', 'n/a')}", f"P99={thermal.get('p99_temp_c', 0):.1f} C, delta={thermal.get('delta_temp_c', 0):.1f} C"),
+        ("Network evidence", active_mode, f"payload={_fmt_bytes(int(active_row.get('payload_bytes', 0)))}"),
+        ("Trust evidence", "accepted" if delivered else "not accepted", f"confidence={confidence:.2f}, loss={thermal.get('delivery_loss', 0)*100:.0f}%"),
+    ]
+    for col, (title, value, copy) in zip(cols, decision_inputs):
+        with col:
+            st.markdown(
+                f"""
+<div class="decision-input">
+  <span>{title}</span>
+  <b>{value}</b>
+  <small>{copy}</small>
+</div>
+""",
+                unsafe_allow_html=True,
+            )
+
+    st.markdown("<div class='sec-hdr'>Operational State</div>", unsafe_allow_html=True)
+    tms_keys = _tsr_key_set(st.session_state.tsr_tms)
+    unknown = [p for p in st.session_state.tsr_real if _poly_key(p["polygon"]) not in tms_keys]
+    if frame["enforce_stop"]:
+        st.markdown('<div class="s-crit">STOP ORDER active in the TMS view.</div>', unsafe_allow_html=True)
+    elif unknown:
+        st.markdown(f'<div class="s-warn">{len(unknown)} real TSR zone(s) are not yet known to TMS.</div>', unsafe_allow_html=True)
+    elif delivered and action == "issue_tsr":
+        st.markdown('<div class="s-ok">Trusted semantic event is available for TMS action.</div>', unsafe_allow_html=True)
+    else:
+        st.markdown('<div class="s-ok">No unresolved safety discrepancy in the current TMS view.</div>', unsafe_allow_html=True)
+
+    if st.session_state.tsr_real:
+        rows_out = []
+        for i, p in enumerate(st.session_state.tsr_real):
+            rows_out.append(
+                {
+                    "Zone": f"TSR-{i+1:02d}",
+                    "Speed": f"{p['speed']} km/h",
+                    "Stop": "YES" if p.get("stop") else "NO",
+                    "TMS aware": "YES" if _poly_key(p["polygon"]) in tms_keys else "NO",
+                }
+            )
+        st.dataframe(pd.DataFrame(rows_out), width="stretch", hide_index=True)
+
+
 def _render_demo_tab(frame):
     thermal = frame.get("thermal", {})
     event = thermal.get("semantic_event", {}) if thermal.get("available") else {}
@@ -655,8 +846,8 @@ def _render_demo_tab(frame):
 <div class="guided-hero">
   <div>
     <div class="guided-eyebrow">ENSURE-6G industry demo</div>
-    <div class="guided-title">Track thermal sensing -> 6G transfer -> TMS decision</div>
-    <div class="guided-lede">A railway thermal sensor detects track conditions. The demo compares RAW image/data, HYBRID preview + metadata, and SEMANTIC meaning-only transfer to show what the TMS can actually use under network stress.</div>
+    <div class="guided-title">Remote sensing -> semantic fusion -> trusted TMS decision</div>
+    <div class="guided-lede">A railway thermal sensor represents remote transport infrastructure. The demo compares RAW image/data, HYBRID preview + metadata, and SEMANTIC meaning-only transfer to show what the TMS can trust and use under network stress.</div>
   </div>
   <div class="guided-live">
     <span>Current chapter</span>
@@ -1005,20 +1196,34 @@ def _render_cloud_safe_map(frame, route_df, secs, tsr_list, title, tms_view=Fals
 def render_tabs(frame, route_df, secs):
     arr = st.session_state.arr
     x = np.arange(secs)
-    tab_demo, tab_thermal, tab_semantic, tab_map, tab_tele, tab_flow, tab_ops = st.tabs(
-        ["Demo", "Thermal", "Semantic", "Maps", "Telemetry", "Network", "TMS"]
+    tab_mission, tab_live, tab_transfer, tab_tms, tab_details = st.tabs(
+        ["Mission", "Live Demo", "Transfer Modes", "TMS Decision", "Technical Details"]
     )
 
-    with tab_demo:
-        _render_demo_tab(frame)
+    with tab_mission:
+        _render_mission_tab(frame)
 
-    with tab_thermal:
+    with tab_live:
+        _render_live_demo_tab(frame)
+
+    with tab_transfer:
+        _render_transfer_comparison(frame)
+
+    with tab_tms:
+        _render_tms_decision_tab(frame)
+
+    with tab_details:
+        detail_thermal, detail_semantic, detail_map, detail_tele, detail_flow, detail_ops = st.tabs(
+            ["Sensing", "Semantic JSON", "Map", "Telemetry", "Data Flow", "Ops Debug"]
+        )
+
+    with detail_thermal:
         _render_thermal_tab(frame)
 
-    with tab_semantic:
+    with detail_semantic:
         _render_semantic_tab(frame)
 
-    with tab_map:
+    with detail_map:
         map_col, side_col = st.columns([3, 1], gap="medium")
 
         with side_col:
@@ -1100,7 +1305,7 @@ def render_tabs(frame, route_df, secs):
                 st.markdown('<div class="map-lbl map-lbl-tms">⬤ TMS View</div>', unsafe_allow_html=True)
                 _render_cloud_safe_map(frame, route_df, secs, st.session_state.tsr_tms, "TMS-known rail corridor", tms_view=True)
 
-    with tab_tele:
+    with detail_tele:
         c1, c2 = st.columns(2, gap="medium")
         with c1:
             st.markdown("<div class='sec-hdr'>Throughput (bps)</div>", unsafe_allow_html=True)
@@ -1142,9 +1347,7 @@ def render_tabs(frame, route_df, secs):
             mc1.metric("TSR zones", str(len(st.session_state.tsr_real)))
             mc2.metric("Alerts", str(len(st.session_state.alerts_feed)))
 
-    with tab_flow:
-        _render_transfer_comparison(frame)
-
+    with detail_flow:
         st.markdown("<div class='sec-hdr'>Supporting Data Flow - Sensors -> BS -> TMS -> Train</div>", unsafe_allow_html=True)
         s_to_bs = max(1, frame["bps_total"])
         to_train = max(1, frame["laneA_bps"] + frame["laneB_bps"])
@@ -1179,7 +1382,7 @@ def render_tabs(frame, route_df, secs):
             c5.metric("Semantic delivery", "YES" if thermal.get("delivered_to_tms") else "NO")
             c6.metric("Thermal loss model", f"{thermal.get('delivery_loss', 0)*100:.0f}%")
 
-    with tab_ops:
+    with detail_ops:
         st.markdown("<div class='sec-hdr'>Status</div>", unsafe_allow_html=True)
         if frame["enforce_stop"]:
             st.markdown('<div class="s-crit">🛑 STOP ORDER in effect (TMS view)</div>', unsafe_allow_html=True)

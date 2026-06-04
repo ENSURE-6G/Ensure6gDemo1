@@ -1,6 +1,6 @@
-# ENSURE 6G Thermal Semantic Communication Demo
+# ENSURE 6G Trustworthy Semantic Sensing Demo
 
-This repository contains a Streamlit demonstration for the ENSURE 6G project. The demo shows how railway thermal sensing data can be transformed into compact semantic messages and delivered through a simulated 6G network to support Traffic Management System (TMS) decisions.
+This repository contains a Streamlit demonstration for the ENSURE 6G project. The demo story is **Trustworthy Semantic Sensing for Remote Transport Infrastructure**: a remote railway asset is monitored by sensing infrastructure, semantic fusion extracts the safety meaning, and a Traffic Management System (TMS) decides whether an operational action is needed.
 
 ## About ENSURE 6G
 
@@ -35,27 +35,35 @@ ENSURE 6G brings together academic and industrial partners to bridge the gap bet
 
 ## Demo Story
 
-The demo presents a railway safety scenario where thermal camera data is collected from track-side infrastructure and transmitted to a TMS over a simulated 6G network.
+Remote transport infrastructure, such as rail lines, bridges, tunnels, and wayside equipment, is costly and risky to inspect manually. Operators need fewer physical inspections, better use of maintenance resources, and faster detection of safety risk without sending every raw sensor stream across the network.
 
 ```text
-Railway thermal sensor -> anomaly extraction -> communication mode -> receiver/TMS -> action
+Remote infrastructure -> semantic sensing and fusion -> transfer mode -> receiver/TMS -> action
 ```
 
-The main goal is to compare three communication approaches:
+The demo shows how semantic sensing can help:
+
+- **Remote infrastructure**: sensing happens at or near distributed assets where routine manual inspection is expensive, slow, or unsafe.
+- **Fewer inspections**: trusted semantic alerts help prioritize site visits instead of dispatching teams for every possible anomaly.
+- **Efficiency**: the network carries the information needed for a decision, not necessarily every raw image or sensor sample.
+- **Safety risk**: the TMS receives a risk level, confidence, location context, and recommended response while the event is still actionable.
+- **Semantic fusion**: local processing combines sensor observations into a compact description of what matters operationally.
+
+The transfer mode comparison is:
 
 - **RAW**: send the full thermal image or raw frame. This preserves detail but requires the highest bandwidth and is most vulnerable under degraded network conditions.
 - **HYBRID**: send a reduced preview plus semantic metadata. This keeps operator context while reducing the payload.
 - **SEMANTIC**: send only the extracted meaning, such as risk level, confidence, hotspot location, and recommended TMS action.
 
-The scripted semantic path demonstrates that a small semantic packet can still trigger a safety action when full image delivery is unreliable.
+The scripted semantic path demonstrates that a small, trustworthy semantic packet can still trigger a TMS action when full raw delivery is inefficient or unreliable.
 
 ## What The App Shows
 
-- A guided `Demo` tab for presenters and visitors.
-- A `Thermal` tab showing railway thermal preview images and the raw algorithm matrix.
-- A `Semantic` tab showing extracted event payloads.
-- A `Network` tab comparing RAW, HYBRID, and SEMANTIC transmission and receiver-side outcomes.
-- A `TMS` tab showing whether the event becomes a traffic management action.
+- A guided `Mission` tab that frames the remote transport infrastructure problem.
+- A `Live Demo` tab showing the selected infrastructure sensing event and semantic outcome.
+- A `Transfer Modes` tab comparing RAW, HYBRID, and SEMANTIC delivery.
+- A `TMS Decision` tab showing whether the semantic event becomes an operational traffic management action.
+- A `Technical Details` tab explaining the sensing data, semantic fusion, network assumptions, and decision logic.
 - One-click sidebar presets for baseline, stressed raw transfer, and semantic safety operation.
 
 ## Thermal Dataset
@@ -135,12 +143,20 @@ Use the sidebar presets:
 2. **Stress - RAW Under Load**: shows how large raw payloads become fragile in adverse network conditions.
 3. **Semantic Safety - Meaning + Action**: shows compact semantic delivery and a TMS action.
 
-For the scripted safety proof point, use the event frame shortcut in the sidebar. The expected result is:
+For the scripted remote infrastructure proof point, use the event frame shortcut in the sidebar. The expected result is:
 
 - Thermal frame: `330`.
 - Risk: `high`.
 - Recommended action: `issue_tsr`.
 - TMS action: triggered in semantic mode.
+
+The intended audience takeaway is:
+
+```text
+RAW sends data. HYBRID sends context. SEMANTIC sends actionable meaning.
+```
+
+For remote transport infrastructure, that means fewer unnecessary inspections, more efficient use of network and maintenance resources, and faster response to safety risk.
 
 ## Repository Structure
 

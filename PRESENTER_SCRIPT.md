@@ -1,6 +1,6 @@
 # ENSURE 6G Demo Presenter Script
 
-This script is for running the Streamlit demo live with an audience. It focuses on the message: semantic communication can preserve the safety decision even when raw data transfer becomes expensive or unreliable.
+This script is for running the Streamlit demo live with an audience. The simplified narrative is **Trustworthy Semantic Sensing for Remote Transport Infrastructure**: semantic fusion turns remote infrastructure observations into compact, trustworthy information that can support Traffic Management System (TMS) action.
 
 ## Setup
 
@@ -18,7 +18,7 @@ http://127.0.0.1:8501/
 
 Before presenting:
 
-- Keep the browser on the `Demo` tab.
+- Keep the browser on the `Mission` tab.
 - Make sure the sidebar is visible.
 - Use the sidebar preset buttons instead of manually tuning controls.
 - If the thermal dataset is available, the semantic proof point should use frame `330`.
@@ -30,14 +30,16 @@ Say:
 ```text
 ENSURE 6G studies how future communication systems can remain secure, reliable, and trustworthy for critical infrastructure.
 
-This demo uses railway thermal sensing as a safety scenario. A track-side thermal sensor observes the railway environment, extracts the important meaning from the data, sends it over a simulated 6G network, and the Traffic Management System decides whether action is needed.
+This demo uses remote transport infrastructure as the safety scenario. Think of railway assets, tunnels, bridges, or track-side equipment that are expensive and risky to inspect manually.
 
-The key comparison is between sending everything, sending a reduced hybrid payload, or sending only the semantic meaning needed for a safety decision.
+The goal is fewer unnecessary inspections, better operational efficiency, and faster response to safety risk. Instead of sending every raw sensor stream, semantic fusion extracts the meaning needed by the TMS.
+
+The key comparison is between sending everything, sending a reduced hybrid payload, or sending only the semantic meaning needed for a decision.
 ```
 
 Point to:
 
-- The `Demo` tab headline.
+- The `Mission` tab headline.
 - The three-mode comparison: RAW, HYBRID, SEMANTIC.
 - The receiver/TMS outcome area.
 
@@ -57,14 +59,14 @@ In the baseline case, the network is healthy and the sensor sends raw image or f
 
 Show:
 
-- `Demo` tab: current mode should be `RAW`.
-- `Thermal` tab: railway thermal preview and raw matrix.
-- `Network` tab: RAW payload is the largest transfer.
+- `Live Demo` tab: current mode should be `RAW`.
+- `Technical Details` tab: sensor preview, raw matrix, or data details.
+- `Transfer Modes` tab: RAW payload is the largest transfer.
 
 Key message:
 
 ```text
-RAW transfer is useful when the network is good, but it is the most expensive option.
+RAW transfer is useful when the network is good, but it is the most expensive option and does not reduce inspection workload by itself.
 ```
 
 ## Step 2: RAW Under Network Stress
@@ -83,14 +85,14 @@ Now the same type of safety event happens under adverse network conditions. The 
 
 Show:
 
-- `Demo` tab: scenario should be `Adverse`, mode should be `RAW`.
-- `Network` tab: receiver-side view for RAW.
-- `TMS` tab: raw data still requires processing before action.
+- `Live Demo` tab: scenario should be `Adverse`, mode should be `RAW`.
+- `Transfer Modes` tab: receiver-side view for RAW.
+- `TMS Decision` tab: raw data still requires processing before action.
 
 Key message:
 
 ```text
-For mission-critical systems, the problem is not only sensing. The important question is whether the right information reaches the decision system in time.
+For remote infrastructure, the problem is not only sensing. The important question is whether the right information reaches the decision system in time to manage safety risk.
 ```
 
 ## Step 3: Semantic Safety Mode
@@ -112,16 +114,15 @@ Say:
 ```text
 In semantic mode, the sensor does not send the full image. It sends the extracted meaning: risk level, confidence, hotspot position, and recommended action.
 
-The receiver does not need to reconstruct the full image before deciding. The TMS can directly interpret the semantic packet and trigger a traffic management action.
+Semantic fusion has already converted the local observations into an operational message. The receiver does not need to reconstruct the full image before deciding. The TMS can directly interpret the semantic packet and trigger a traffic management action.
 ```
 
 Show:
 
-- `Demo` tab: mode should be `SEMANTIC`.
-- `Thermal` tab: frame `330`, risk `HIGH`.
-- `Semantic` tab: compact semantic packet.
-- `Network` tab: semantic payload and receiver outcome.
-- `TMS` tab: recommended action should be `issue_tsr`.
+- `Live Demo` tab: mode should be `SEMANTIC`, frame `330`, risk `HIGH`.
+- `Transfer Modes` tab: semantic payload and receiver outcome.
+- `TMS Decision` tab: recommended action should be `issue_tsr`.
+- `Technical Details` tab: compact semantic packet and fusion logic.
 
 Expected proof point:
 
@@ -136,7 +137,7 @@ TMS action: triggered
 Key message:
 
 ```text
-Semantic communication reduces the transmitted payload while preserving the safety-critical decision.
+Semantic communication reduces the transmitted payload while preserving the safety-critical decision and enabling a TMS action.
 ```
 
 ## Optional: Explain HYBRID Mode
@@ -149,13 +150,13 @@ Hybrid mode is the middle ground. It sends a small visual preview plus semantic 
 
 Show:
 
-- `Network` tab: HYBRID card.
+- `Transfer Modes` tab: HYBRID card.
 - Receiver-side comparison: preview plus metadata.
 
 Key message:
 
 ```text
-HYBRID supports human inspection. SEMANTIC supports direct machine action.
+HYBRID supports targeted human inspection. SEMANTIC supports direct machine action.
 ```
 
 ## Closing Summary
@@ -163,11 +164,11 @@ HYBRID supports human inspection. SEMANTIC supports direct machine action.
 Say:
 
 ```text
-This demo shows why 6G reliability is not only about higher data rates. For critical infrastructure, the network must deliver the right information, at the right time, in a trustworthy form.
+This demo shows why 6G reliability is not only about higher data rates. For remote transport infrastructure, the network must deliver the right information, at the right time, in a trustworthy form.
 
 RAW sends data. HYBRID sends context. SEMANTIC sends meaning.
 
-That is the core value: smaller payload, clearer decision, and better resilience under degraded conditions.
+That is the core value: fewer unnecessary inspections, more efficient operations, clearer safety decisions, and better resilience under degraded conditions.
 ```
 
 ## Troubleshooting
