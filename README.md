@@ -1,5 +1,5 @@
 # ENSURE 6G Trustworthy Semantic Sensing Demo
-
+![ENSURE-6G industrial logistics](https://raw.githubusercontent.com/ENSURE-6G/.github/main/profile/assets/ensure-6g-industrial-logistics.png)
 This repository contains a Streamlit demonstration for the ENSURE 6G project. The demo story is **Trustworthy Semantic Sensing for Remote Transport Infrastructure**: a remote railway asset is monitored by sensing infrastructure, semantic fusion extracts the safety meaning, and a Traffic Management System (TMS) decides whether an operational action is needed.
 
 ## About ENSURE 6G
